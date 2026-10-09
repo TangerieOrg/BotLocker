@@ -11,7 +11,7 @@ export async function handleMention(msg : Message) {
     if(msg.author.bot || !msg.inGuild()) return;
     if(!msg.mentions.has(msg.client.user, { ignoreEveryone: true, ignoreRoles: true })) return;
 
-    if(Date.now() - (lastReply.get(msg.author.id) ?? 0) < COOLDOWN_MS) return;
+    // if(Date.now() - (lastReply.get(msg.author.id) ?? 0) < COOLDOWN_MS) return;
     lastReply.set(msg.author.id, Date.now());
 
     const link = await getLink(msg.author.id);
