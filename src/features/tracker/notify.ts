@@ -2,7 +2,7 @@ import type { APIEmbed, APIEmbedField, Client } from "discord.js";
 import { getNotifyGuilds, type Link, type Match } from "../../db/mod.ts";
 import { heroIcon, heroName, rankName } from "../../deadlock/assets.ts";
 import { COLOURS, formatDuration, modeName } from "../../discord/embeds.ts";
-import { formatSouls, getCompliment, getDerankLine, getInsult, getStreakBrokenLine, getTiltLine, type LineContext } from "../../lines/mod.ts";
+import { formatSouls, getCompliment, getDerankLine, getInsult, getStreakBrokenLine, getTiltLine, getWinStreakLine, matchContext } from "../../lines/mod.ts";
 import { SEND_DISCORD_MESSAGE } from "../../config.ts";
 
 export interface MatchEvent {
@@ -17,13 +17,8 @@ async function buildEmbed(event : MatchEvent, displayName : string) : Promise<AP
     const { match, streak, previousStreak, deranked } = event;
     const hero = await heroName(match.hero_id);
 
-    const ctx : LineContext = {
-        hero,
-        kills: match.kills,
-        deaths: match.deaths,
-        assists: match.assists,
-        souls: match.game_mode == 4 ? undefined : match.net_worth
-    };
+    const ranked = match.match_mode == 4 && match.badge;
+    const ctx = { ...matchContext(match, hero, ranked ? await rankName(match.badge) : undefined), name: displayName };
 
     const fields : APIEmbedField[] = [
         { name: "K/D/A", value: `${match.kills}/${match.deaths}/${match.assists}`, inline: true },
@@ -43,13 +38,16 @@ async function buildEmbed(event : MatchEvent, displayName : string) : Promise<AP
     if(match.won) {
         description = getCompliment(ctx);
         if(previousStreak <= -3) description += `\n\n**${getStreakBrokenLine(ctx, -previousStreak)}**`;
+        const winStreak = getWinStreakLine(ctx, streak);
+        if(winStreak) description += `\n\n**${winStreak}**`;
     } else {
         description = `This is for you: ${getInsult(ctx)}`;
         const tilt = getTiltLine(ctx, -streak);
         if(tilt) description += `\n\n**${tilt}**`;
         if(deranked != null) {
-            description += `\n\n**${getDerankLine()}**`;
-            fields.push({ name: "Deranked To", value: await rankName(deranked), inline: true });
+            const rank = await rankName(deranked);
+            description += `\n\n**${getDerankLine({ ...ctx, rank })}**`;
+            fields.push({ name: "Deranked To", value: rank, inline: true });
         }
     }
 

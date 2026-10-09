@@ -1,10 +1,10 @@
 import { ActivityType, type Client } from "discord.js";
 import { getMatch } from "../deadlock/api.ts";
 import { getLatestLinkedMatch, getLinkedMatchRows, getLinks, getMatchDetails, getRecentMatches, getStreak, type Link } from "../db/mod.ts";
-import { heroName } from "../deadlock/assets.ts";
+import { heroName, rankName } from "../deadlock/assets.ts";
 import type { MatchMetadata } from "../deadlock/types.ts";
 import { DEADLOCK_APP_ID, getSteamStatuses, type SteamStatus } from "../deadlock/steam.ts";
-import { getGroupPresenceLine, getIdleLine, getOnlinePresenceLine, getPresenceLine } from "../lines/mod.ts";
+import { getGroupPresenceLine, getIdleLine, getOnlinePresenceLine, getPresenceLine, matchContext } from "../lines/mod.ts";
 import { memberName } from "../discord/util.ts";
 import { PRESENCE_ROTATE_MS as ROTATE_MS } from "../config.ts";
 
@@ -60,13 +60,8 @@ async function latestMatchLine(client : Client) {
         return getGroupPresenceLine(winners, losers);
     }
 
-    return getPresenceLine(await memberName(client, latest.user_id), {
-        hero: await heroName(latest.hero_id),
-        kills: latest.kills,
-        deaths: latest.deaths,
-        assists: latest.assists,
-        souls: latest.game_mode == 4 ? undefined : latest.net_worth
-    }, !!latest.won);
+    const rank = latest.match_mode == 4 && latest.badge ? await rankName(latest.badge) : undefined;
+    return getPresenceLine(await memberName(client, latest.user_id), matchContext(latest, await heroName(latest.hero_id), rank), !!latest.won);
 }
 
 async function nextStatus(client : Client) {
