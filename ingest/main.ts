@@ -4,7 +4,7 @@ import { parseArgs } from "@std/cli/parse-args";
 
 const SERVER_URL = "https://tangerie.xyz/deadlock";
 const DEADLOCK_API_URL = "https://api.deadlock-api.com/v1/matches/salts";
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 // Cache entries start with a header holding the host and path as separate NUL terminated strings
 // deno-lint-ignore no-control-regex
@@ -12,6 +12,8 @@ const URL_PATTERN = /replay(\d+)\.valve\.net\x00?\/1422450\/(\d+)_(\d+)\.(meta|d
 const HEADER_BYTES = 512;
 const BATCH_SIZE = 100;
 const FLUSH_MS = 2000;
+const RESCAN_MS = 60000;
+const MAX_READ_ATTEMPTS = 60;
 const MAX_BACKOFF_MS = 60000;
 const MAX_LOG_BYTES = 1024 * 1024;
 
@@ -76,7 +78,8 @@ async function findSteam() {
     return `${Deno.env.get("HOME")}/.local/share/Steam`;
 }
 
-async function readSalt(path : string) : Promise<Salt | undefined> {
+// "retry" means the file exists but couldn't be read yet, usually because Steam still has it open
+async function readSalt(path : string) : Promise<Salt | undefined | "retry"> {
     let file;
     try {
         file = await Deno.open(path, { read: true });
@@ -93,9 +96,10 @@ async function readSalt(path : string) : Promise<Salt | undefined> {
             metadata_salt: m[4] == "meta" ? salt : null,
             replay_salt: m[4] == "dem" ? salt : null
         };
-    } catch {
-        // Steam can still be writing it, there'll be another modify event
-        return undefined;
+    } catch(err) {
+        if(err instanceof Deno.errors.NotFound) return undefined;
+        // Folders get events too
+        return await Deno.stat(path).then(x => x.isDirectory).catch(() => false) ? undefined : "retry";
     } finally {
         file?.close();
     }
@@ -201,18 +205,46 @@ async function flush() {
     await Promise.all(targets.map(x => x.flush()));
 }
 
-async function scan(cacheDir : string) {
-    let files = 0;
-    for await(const path of walk(cacheDir)) {
-        files++;
-        add(await readSalt(path));
+// Files Steam had locked, with how many times they've been tried
+const unread = new Map<string, number>();
+
+async function check(path : string) {
+    const salt = await readSalt(path);
+    if(salt != "retry") {
+        unread.delete(path);
+        add(salt);
+        return;
     }
-    log(`Scanned ${files} cache file(s), ${pending()} salt(s) to send`);
+
+    const attempts = (unread.get(path) ?? 0) + 1;
+    if(attempts == 1) log(`Couldn't read ${path} yet, retrying`);
+    if(attempts >= MAX_READ_ATTEMPTS) {
+        log(`Gave up reading ${path}`);
+        unread.delete(path);
+    } else unread.set(path, attempts);
+}
+
+// With since, only looks at files changed after it, which keeps the regular rescans cheap
+async function scan(cacheDir : string, since = 0) {
+    let files = 0;
+    const before = pending();
+    for await(const path of walk(cacheDir)) {
+        if(since) {
+            const mtime = await Deno.stat(path).then(x => x.mtime?.getTime() ?? 0).catch(() => 0);
+            if(mtime < since) continue;
+        }
+        files++;
+        await check(path);
+    }
+    if(!since || pending() > before) log(`Scanned ${files} cache file(s), ${pending()} salt(s) to send`);
 }
 
 async function watch(cacheDir : string) {
     const dirty = new Set<string>();
     const watcher = Deno.watchFs(cacheDir, { recursive: true });
+
+    // Rescan regularly in case the watcher misses something, with some overlap for coarse mtimes
+    let lastScan = Date.now();
 
     // Batch up events, Steam writes each file in a few chunks
     let busy = false;
@@ -220,10 +252,19 @@ async function watch(cacheDir : string) {
         if(busy) return;
         busy = true;
         try {
-            const paths = [...dirty];
+            const paths = new Set([...dirty, ...unread.keys()]);
             dirty.clear();
-            for(const x of paths) add(await readSalt(x));
+            for(const x of paths) await check(x);
+
+            if(Date.now() - lastScan >= RESCAN_MS) {
+                const since = lastScan - 5000;
+                lastScan = Date.now();
+                await scan(cacheDir, since);
+            }
+
             await flush();
+        } catch(err) {
+            log("Check failed:", err);
         } finally {
             busy = false;
         }
@@ -231,7 +272,8 @@ async function watch(cacheDir : string) {
 
     try {
         for await(const event of watcher) {
-            if(event.kind != "create" && event.kind != "modify") continue;
+            // Windows reports some writes as rename/any/other, so take everything but deletes
+            if(event.kind == "remove" || event.kind == "access") continue;
             for(const x of event.paths) dirty.add(x);
         }
     } finally {
