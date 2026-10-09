@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push.yml@main
+    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push-nocheck.yml@main
     with:
       image_name: botlocker
       registry_name: docker.tangerie.xyz
