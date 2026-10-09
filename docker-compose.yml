@@ -1,0 +1,33 @@
+version: '3'
+services:
+  bot:
+    image: ${IMAGE_NAME}-bot:latest
+    deploy:
+      replicas: 1
+      labels:
+        xyz.tangerie.reverse_proxy.path: "/deadlock"
+        xyz.tangerie.reverse_proxy.port: "80"
+    networks:
+      - default
+      - nginx-proxy-overlay
+    environment:
+      - ENV_FILE=/run/secrets/BotLockerEnv
+      - DATA_DIR=/data
+      - PORT=80
+    volumes:
+      - botlocker-data:/data
+    secrets:
+      - BotLockerEnv
+
+volumes:
+  botlocker-data:
+
+networks:
+  default:
+  nginx-proxy-overlay:
+    external: true
+    driver: overlay
+
+secrets:
+  BotLockerEnv:
+    external: true

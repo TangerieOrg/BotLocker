@@ -1,0 +1,17 @@
+{
+    "tasks": {
+        "dev": "PORT=3030 SEND_DISCORD_MESSAGE=0 deno run -A --watch src/main.ts",
+        "start": "deno run -A src/main.ts",
+        "check": "deno check src/main.ts src/discord/commands/*.ts"
+    },
+    "imports": {
+        "@db/sqlite": "jsr:@db/sqlite@^0.13.0",
+        "@oak/oak": "jsr:@oak/oak@^17.2.0",
+        "discord.js": "npm:discord.js@^14.22.1",
+        "insult": "npm:insult@0.0.3",
+        "insult-compliment": "npm:insult-compliment@^1.1.4",
+        "@tangerie/utils": "jsr:@tangerie/utils@^2.13.0",
+        "@std/dotenv": "jsr:@std/dotenv@^0.225.5"
+    },
+    "nodeModulesDir": "auto"
+}

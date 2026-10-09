@@ -1,0 +1,25 @@
+name: Build, Push & Deploy
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push.yml@main
+    with:
+      image_name: botlocker
+      registry_name: docker.tangerie.xyz
+      ref: ${{ github.ref_name }}
+    secrets: inherit
+
+  deploy:
+    uses: TangerieOrg/Workflows/.github/workflows/docker-deploy.yml@main
+    needs:
+      - build
+    with:
+      image_name: botlocker
+      registry_name: docker.tangerie.xyz
+    secrets: inherit
