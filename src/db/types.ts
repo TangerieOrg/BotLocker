@@ -38,6 +38,11 @@ export interface Totals {
     assists: number;
 }
 
+export interface LossTotals {
+    losses: number;
+    time_lost: number;
+}
+
 export interface MatchSalt {
     match_id: number;
     cluster: number;

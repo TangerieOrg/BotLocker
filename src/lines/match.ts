@@ -147,7 +147,16 @@ const LOSS_LINES = [
     "Not one Guardian was harmed in the making of this match.",
     "You lost the teamfight before it even started. Mostly by being dead.",
     "The enemy team won and they barely know your name. You were that forgettable.",
-    "Your parry hit the air with incredible confidence."
+    "Your parry hit the air with incredible confidence.",
+    "That's {losttime} spent losing so far. Hope it was fun.",
+    "{losses} losses. That's {losttime} you'll never get back.",
+    "Running total: {losttime} of losing. And counting.",
+    "You've now spent {losttime} losing Deadlock games. Worth it?",
+    "Add it to the pile. {losttime} of losses and counting.",
+    "You've lost {losses} games and {losttime} of your life.",
+    "{losttime} of losing. You could have learned a language.",
+    "Loss number {losses}. Total time wasted: {losttime}.",
+    "{losttime} of losing. Your Steam hours are a cry for help."
 ];
 
 const WIN_LINES = [
@@ -218,7 +227,9 @@ const WIN_LINES = [
     "Won on {hero}. Somewhere a {hero} main just felt a disturbance.",
     "You won. I had a roast ready and everything.",
     "Didn't feed, didn't throw, didn't lose. Who are you?",
-    "{name} got a W. Mark the calendar."
+    "{name} got a W. Mark the calendar.",
+    "Nice win. Only {losttime} of losses to make up for.",
+    "One win. {losses} losses. Keep going, you'll catch up eventually."
 ];
 
 // Games over before 20 minutes, someone got stomped
@@ -314,7 +325,8 @@ const TILT_LINES : Array<[number, string[]]> = [
         "{n} in a row. This isn't a losing streak, it's a lifestyle.",
         "{n} straight losses. The matchmaker is running experiments on you.",
         "{n} in a row. Your MMR is in witness protection.",
-        "{n} losses back to back. I'm calling someone."
+        "{n} losses back to back. I'm calling someone.",
+        "{n} in a row and {losttime} of losing. This is your whole personality now."
     ]],
     [8, [
         "{n} losses in a row. This is a cry for help.",
@@ -323,7 +335,8 @@ const TILT_LINES : Array<[number, string[]]> = [
         "{n} in a row. Your rank is on a zipline straight down.",
         "{n} straight. Even the enemy teams feel bad now.",
         "{n} losses back to back. Have you considered a different hobby? Any hobby?",
-        "{n} in a row. The Patron sends its condolences."
+        "{n} in a row. The Patron sends its condolences.",
+        "{n} straight losses. {losttime} lost. Please log off."
     ]],
     [5, [
         "{n} losses in a row. The Steam refund window has closed, sorry.",
@@ -332,7 +345,8 @@ const TILT_LINES : Array<[number, string[]]> = [
         "{n} straight. The definition of insanity is queuing again. Go on.",
         "{n} losses in a row. It's not the matchmaking.",
         "{n} straight Ls. That's not bad luck anymore.",
-        "{n} in a row. Someone check on them."
+        "{n} in a row. Someone check on them.",
+        "{n} straight, and {losttime} of losing. Go outside."
     ]],
     [3, [
         "{n} in a row. Maybe uninstall?",
@@ -430,7 +444,7 @@ export function getCompliment(ctx : LineContext) {
 
 function tiered(tiers : Array<[number, string[]]>, ctx : LineContext, streak : number) {
     for(const [min, lines] of tiers) {
-        if(streak >= min) return fill(fresh(lines), ctx, streak);
+        if(streak >= min) return fill(fresh(lines, usable(ctx)), ctx, streak);
     }
     return undefined;
 }

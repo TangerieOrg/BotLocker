@@ -1,4 +1,4 @@
-import { fresh } from "./common.ts";
+import { formatLossTime, fresh } from "./common.ts";
 import type { StatusContext } from "./presence.ts";
 
 // Same idea as the status lines, worded to follow a name in /online ("Josh - hiding from Deadlock...")
@@ -15,7 +15,9 @@ const ONLINE_LOSS_STATUS = [
     "drafting an apology to their teammates",
     "looking at the play button and sighing",
     "pretending to be AFK",
-    "googling how to parry"
+    "googling how to parry",
+    "processing {losttime} of losses",
+    "recovering from {losses} losses"
 ];
 
 const ONLINE_WIN_STATUS = [
@@ -38,7 +40,9 @@ const ONLINE_TILT_STATUS = [
     "rethinking Deadlock after {n} Ls",
     "blaming matchmaking for {n} losses",
     "taking a break after {n} losses (good)",
-    "staring at {n} losses in a row"
+    "staring at {n} losses in a row",
+    "recovering from {losttime} of losing",
+    "reflecting on {losttime} of losses"
 ];
 
 // Every line here should mention {game} so it's clear what they're playing
@@ -55,12 +59,17 @@ const OTHER_GAME_STATUS = [
     "dodging the queue with {game}"
 ];
 
-export function getOnlineStatusLine(ctx : Omit<StatusContext, "name" | "inDeadlock">) {
+// losses/lostSeconds are since the guild's last reset, lines needing them are skipped without any
+export function getOnlineStatusLine(ctx : Omit<StatusContext, "name" | "inDeadlock"> & { losses?: number, lostSeconds?: number }) {
     const lines = ctx.game ? OTHER_GAME_STATUS :
         ctx.streak <= -3 ? ONLINE_TILT_STATUS :
         ctx.won ? ONLINE_WIN_STATUS : ONLINE_LOSS_STATUS;
 
-    return fresh(lines)
+    const keep = (x : string) => (!!ctx.lostSeconds || !x.includes("{losttime}")) && ((ctx.losses ?? 0) > 1 || !x.includes("{losses}"));
+
+    return fresh(lines, keep)
         .replaceAll("{game}", ctx.game ?? "")
-        .replaceAll("{n}", (-ctx.streak).toString());
+        .replaceAll("{n}", (-ctx.streak).toString())
+        .replaceAll("{losses}", (ctx.losses ?? 0).toString())
+        .replaceAll("{losttime}", formatLossTime(ctx.lostSeconds ?? 0));
 }

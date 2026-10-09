@@ -1,9 +1,9 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, SlashCommandBuilder } from "discord.js";
 import { heroName } from "../../deadlock/assets.ts";
 import { DEADLOCK_APP_ID, getSteamStatuses, hasSteamKey } from "../../deadlock/steam.ts";
-import { getLinks, getRecentMatches, getStreak, type Link } from "../../db/mod.ts";
+import { getGuild, getLinks, getLossTotals, getRecentMatches, getStreak, type Link } from "../../db/mod.ts";
 import { COLOURS, formatStreak } from "../embeds.ts";
-import { getOnlineStatusLine } from "../../lines/mod.ts";
+import { getOnlineStatusLine, lossContext } from "../../lines/mod.ts";
 import { fetchMembers } from "../util.ts";
 
 export const data = new SlashCommandBuilder()
@@ -47,12 +47,14 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     }
 
     if(online.length > 0) {
+        const { period_start } = await getGuild(interaction.guildId!);
         const lines = await Promise.all(online.map(async x => {
             const status = statuses.get(x.account_id)!;
             return `**${name(x)}** - ${getOnlineStatusLine({
                 game: status.gameextrainfo,
                 won: !!(await getRecentMatches(x.account_id, 1)).at(0)?.won,
-                streak: await getStreak(x.account_id)
+                streak: await getStreak(x.account_id),
+                ...lossContext(await getLossTotals(x.account_id, period_start))
             })}`;
         }));
         sections.push(`**Online**\n${lines.join("\n")}`);

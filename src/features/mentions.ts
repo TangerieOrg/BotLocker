@@ -1,7 +1,7 @@
 import type { Message } from "discord.js";
-import { getLink, getRecentMatches, getStreak } from "../db/mod.ts";
+import { getGuild, getLink, getLossTotals, getRecentMatches, getStreak } from "../db/mod.ts";
 import { heroName, rankName } from "../deadlock/assets.ts";
-import { getMentionLine, matchContext } from "../lines/mod.ts";
+import { getMentionLine, lossContext, matchContext } from "../lines/mod.ts";
 
 const COOLDOWN_MS = 30 * 1000;
 
@@ -19,6 +19,7 @@ export async function handleMention(msg : Message) {
 
     const line = getMentionLine(link && last ? {
         ...matchContext(last, await heroName(last.hero_id), last.match_mode == 4 && last.badge ? await rankName(last.badge) : undefined),
+        ...lossContext(await getLossTotals(link.account_id, (await getGuild(msg.guildId)).period_start)),
         name: msg.member?.displayName ?? msg.author.username,
         won: !!last.won,
         streak: await getStreak(link.account_id),

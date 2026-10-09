@@ -1,8 +1,8 @@
 import type { APIEmbed, APIEmbedField, Client } from "discord.js";
-import { getNotifyGuilds, type Link, type Match } from "../../db/mod.ts";
+import { getLossTotals, getNotifyGuilds, type Guild, type Link, type Match } from "../../db/mod.ts";
 import { heroIcon, heroName, rankName } from "../../deadlock/assets.ts";
 import { COLOURS, formatDuration, modeName } from "../../discord/embeds.ts";
-import { formatSouls, getCompliment, getDerankLine, getInsult, getStreakBrokenLine, getTiltLine, getWinStreakLine, matchContext } from "../../lines/mod.ts";
+import { formatSouls, getCompliment, getDerankLine, getInsult, getStreakBrokenLine, getTiltLine, getWinStreakLine, lossContext, matchContext } from "../../lines/mod.ts";
 import { SEND_DISCORD_MESSAGE } from "../../config.ts";
 
 export interface MatchEvent {
@@ -13,12 +13,16 @@ export interface MatchEvent {
     deranked?: number;
 }
 
-async function buildEmbed(event : MatchEvent, displayName : string) : Promise<APIEmbed> {
+async function buildEmbed(event : MatchEvent, displayName : string, guild : Guild) : Promise<APIEmbed> {
     const { match, streak, previousStreak, deranked } = event;
     const hero = await heroName(match.hero_id);
 
     const ranked = match.match_mode == 4 && match.badge;
-    const ctx = { ...matchContext(match, hero, ranked ? await rankName(match.badge) : undefined), name: displayName };
+    const ctx = {
+        ...matchContext(match, hero, ranked ? await rankName(match.badge) : undefined),
+        ...lossContext(await getLossTotals(match.account_id, guild.period_start)),
+        name: displayName
+    };
 
     const fields : APIEmbedField[] = [
         { name: "K/D/A", value: `${match.kills}/${match.deaths}/${match.assists}`, inline: true },
@@ -76,7 +80,7 @@ export async function sendMatchEvent(client : Client, event : MatchEvent) {
             continue;
         }
 
-        const embed = await buildEmbed(event, member.displayName);
+        const embed = await buildEmbed(event, member.displayName, g);
         console.log(`[Notify] Sent ${event.match.won ? "win" : "loss"} for ${member.displayName} to #${channel.name} in ${guild.name}`)
         if(SEND_DISCORD_MESSAGE) {
             await channel.send({ embeds: [embed] })

@@ -52,7 +52,11 @@ const MENTION_LOSS_LINES = [
     "Playing like that in {rank} and you're tagging me?",
     "I'd take you seriously but I've seen your last game.",
     "Still thinking about that {hero} game? Because I am. It was bad.",
-    "You lost {ago}. Maybe go practise instead of talking to me."
+    "You lost {ago}. Maybe go practise instead of talking to me.",
+    "You've spent {losttime} losing and you want to talk to me?",
+    "{losses} losses. {losttime} of feeding. Sit down.",
+    "Imagine spending {losttime} losing and still having the confidence to ping me.",
+    "{name}, you've lost {losttime} of your life to Deadlock losses. Use the rest wisely. Not like this."
 ];
 
 const MENTION_WIN_LINES = [
@@ -66,7 +70,9 @@ const MENTION_WIN_LINES = [
     "I'll be nice for exactly one game. That was it.",
     "You won {ago}. I've already forgotten.",
     "That {hero} game was alright. Don't push it.",
-    "One W and you're in my mentions. Classic."
+    "One W and you're in my mentions. Classic.",
+    "One win doesn't cancel out {losttime} of losing.",
+    "Nice win. Shame about the other {losses} losses."
 ];
 
 const MENTION_TILT_LINES = [
@@ -79,7 +85,10 @@ const MENTION_TILT_LINES = [
     "Ping me when you've won one. Could be a while.",
     "{n} Ls in a row. Go to sleep.",
     "I'll talk to you after your {n}-game losing streak ends. So never.",
-    "Bold, from someone on a {n}-game losing streak."
+    "Bold, from someone on a {n}-game losing streak.",
+    "{n} in a row, {losttime} of losing. Go outside.",
+    "{losttime} of losses. You need a hobby. A different one.",
+    "You've lost {losses} games. That's {losttime}. Think about that."
 ];
 
 const MENTION_UNLINKED_LINES = [

@@ -1,7 +1,7 @@
 import type { Database } from "@db/sqlite";
 import type { MatchHistoryEntry, MatchMetadata } from "../deadlock/types.ts";
 import { asDbFunction, stmt } from "./connection.ts";
-import type { HeroTotals, Match, Totals } from "./types.ts";
+import type { HeroTotals, LossTotals, Match, Totals } from "./types.ts";
 
 // Unranked + Ranked only, skips bots, private lobbies, tutorials etc
 export const TRACKED_MATCH_MODES = [1, 4];
@@ -88,6 +88,12 @@ export const getPeriodTotals = asDbFunction((db, since : number, streetBrawl : b
     WHERE m.start_time >= ? AND (m.game_mode = 4) = ?
     GROUP BY m.account_id
 `, s => s.all(since, streetBrawl ? 1 : 0)) as unknown as Totals[]);
+
+// Every lost game since the given time, Street Brawl included since it's still time spent losing
+export const getLossTotals = asDbFunction((db, accountId : number, since : number) => stmt(db, `--sql
+    SELECT COUNT(*) AS losses, COALESCE(SUM(duration_s), 0) AS time_lost
+    FROM matches WHERE account_id = ? AND start_time >= ? AND won = 0
+`, s => s.get(accountId, since)) as unknown as LossTotals);
 
 // Streak counted back from the given match (inclusive). Positive = wins, negative = losses
 export const getStreak = asDbFunction((db, accountId : number, beforeMatchId : number = Number.MAX_SAFE_INTEGER, streetBrawl? : boolean) => {

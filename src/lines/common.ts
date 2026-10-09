@@ -1,4 +1,4 @@
-import type { Match } from "../db/mod.ts";
+import type { LossTotals, Match } from "../db/mod.ts";
 
 export interface LineContext {
     hero: string;
@@ -11,6 +11,9 @@ export interface LineContext {
     minutes?: number;
     mode?: number;
     rank?: string;
+    // Since the guild's last /resetrecord
+    losses?: number;
+    lostSeconds?: number;
 }
 
 // Everything the lines can use from a stored match. Rank needs a lookup so callers pass it in, and only for ranked games
@@ -26,6 +29,12 @@ export const matchContext = (match : Match, hero : string, rank? : string) : Lin
     rank
 });
 
+// Left unset with no losses so lines about time spent losing get skipped
+export const lossContext = (totals : LossTotals) => ({
+    losses: totals.losses || undefined,
+    lostSeconds: totals.time_lost || undefined
+});
+
 const BLOCKED = /\b(women|toilet|kiss|bed|hot|nickel)\b/i;
 
 export const pick = <T,>(xs : T[]) => xs[Math.floor(Math.random() * xs.length)];
@@ -36,7 +45,10 @@ const OPTIONAL : [string, (ctx : LineContext) => unknown][] = [
     ["{name}", ctx => ctx.name],
     ["{lasthits}", ctx => ctx.lastHits],
     ["{minutes}", ctx => ctx.minutes],
-    ["{rank}", ctx => ctx.rank]
+    ["{rank}", ctx => ctx.rank],
+    // Lines say "{losses} losses", so not for just the one
+    ["{losses}", ctx => (ctx.losses ?? 0) > 1 ? ctx.losses : undefined],
+    ["{losttime}", ctx => ctx.lostSeconds]
 ];
 
 // Skip lines that need something this match doesn't have
@@ -68,6 +80,8 @@ export function fill(line : string, ctx : LineContext, n? : number) {
         .replaceAll("{lasthits}", (ctx.lastHits ?? 0).toString())
         .replaceAll("{minutes}", (ctx.minutes ?? 0).toString())
         .replaceAll("{rank}", ctx.rank ?? "")
+        .replaceAll("{losses}", (ctx.losses ?? 0).toString())
+        .replaceAll("{losttime}", formatLossTime(ctx.lostSeconds ?? 0))
         .replaceAll("{n}", (n ?? 0).toString());
 }
 
@@ -78,3 +92,10 @@ export function filtered(fn : () => string) {
 }
 
 export const formatSouls = (souls : number) => souls >= 1000 ? `${(souls / 1000).toFixed(1)}k` : souls.toString();
+
+// "45 minutes", "1 hour", "3.2 hours"
+export function formatLossTime(seconds : number) {
+    if(seconds < 60 * 60) return `${Math.round(seconds / 60)} minutes`;
+    const hours = (seconds / 60 / 60).toFixed(1).replace(/\.0$/, "");
+    return `${hours} ${hours == "1" ? "hour" : "hours"}`;
+}
