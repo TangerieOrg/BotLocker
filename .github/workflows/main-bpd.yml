@@ -8,11 +8,12 @@ on:
 
 jobs:
   build:
-    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push-nocheck.yml@main
+    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push.yml@main
     with:
       image_name: botlocker
       registry_name: docker.tangerie.xyz
       ref: ${{ github.ref_name }}
+      force_build: true
     secrets: inherit
 
   deploy:
