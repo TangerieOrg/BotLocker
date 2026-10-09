@@ -5,7 +5,7 @@ import { getLinkByAccount, getLinks, getMatchIds, getStoredMatch, getStreak, ins
 import { type MatchEvent, sendMatchEvent } from "./notify.ts";
 import { loadScoreboard } from "../scoreboard.ts";
 import { GcError, GcResult, getGcHistory, type HistoryPage } from "../../steam/gc.ts";
-import { steamEnabled, steamEvents, steamReady } from "../../steam/client.ts";
+import { isPlaying, steamEnabled, steamEvents, steamReady } from "../../steam/client.ts";
 import { GC_POLL_INTERVAL_MS, MAX_NOTIFY_AGE_S, POLL_INTERVAL_MS } from "../../config.ts";
 
 interface Found {
@@ -224,6 +224,12 @@ function onStopped(client : Client, accountId : number) {
     const check = async (attempt : number) => {
         const link = await getLinkByAccount(accountId);
         if(!link) return;
+
+        // Back in a game (or it was a blip), the next time they stop will check again
+        if(isPlaying(accountId)) {
+            checking.delete(accountId);
+            return console.log(`[Tracker] ${accountId} is playing again, stopped checking`);
+        }
 
         const found = await findNew(link, true).catch(err => {
             console.error(`[Tracker] Failed to check ${accountId}`, err);

@@ -17,8 +17,9 @@ const RELOGIN_MS = 5 * 60 * 1000;
 interface Persona {
     player_name: string;
     avatar_url_full?: string;
-    persona_state: number;
-    game_played_app_id: number | null;
+    persona_state?: number | null;
+    game_played_app_id?: number | null;
+    gameid?: string | null;
 }
 
 interface Client {
@@ -111,13 +112,24 @@ async function syncFriends() {
     }
 }
 
-function onPersona(sid : { accountid: number }, user : Persona) {
+// Updates often only carry what changed, anything missing falls back to what we already knew
+function onPersona(sid : { accountid: number, getSteamID64() : string }, update : Persona) {
     const id = accountOf(sid);
-    const now = user.game_played_app_id == APP_ID && user.persona_state != 0;
+    const known : Partial<Persona> = client?.users[sid.getSteamID64()] ?? {};
+    const field = <K extends keyof Persona>(k : K) => update[k] ?? known[k];
+
+    const state = field("persona_state");
+    const gameId = field("gameid");
+    const appId = field("game_played_app_id");
+    const now = state != 0 && (gameId == String(APP_ID) || appId == APP_ID);
+
     const was = playing.get(id) ?? false;
     playing.set(id, now);
+    if(now && !was) console.log(`[Steam] ${id} started playing Deadlock`);
     if(was && !now) steamEvents.emit("deadlockStopped", id);
 }
+
+export const isPlaying = (accountId : number) => playing.get(accountId) ?? false;
 
 export function startSteam() {
     if(!steamEnabled()) {
