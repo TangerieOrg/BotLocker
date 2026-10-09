@@ -4,6 +4,7 @@ import { ensureGuild, removeGuild } from "../db/mod.ts";
 import { handleMention } from "../features/mentions.ts";
 import { startPresence } from "../features/presence.ts";
 import { startTracker } from "../features/tracker/mod.ts";
+import { setIngestClient } from "../features/ingest.ts";
 import { commands, handleInteraction, loadCommands } from "./commands.ts";
 
 export async function startBot() {
@@ -27,6 +28,7 @@ export async function startBot() {
         console.log(`Registered ${body.length} commands${DEV_GUILD_ID ? ` to ${DEV_GUILD_ID}` : ""}`);
 
         startTracker(c);
+        setIngestClient(c);
         startPresence(c);
     });
 

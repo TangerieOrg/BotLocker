@@ -37,3 +37,12 @@ export interface Totals {
     deaths: number;
     assists: number;
 }
+
+export interface MatchSalt {
+    match_id: number;
+    cluster: number;
+    salt: number;
+    status: "ok" | "failed";
+    attempts: number;
+    updated_at: number;
+}

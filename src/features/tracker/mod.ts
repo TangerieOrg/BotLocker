@@ -1,7 +1,7 @@
 import type { Client } from "discord.js";
 import { getMatchHistory, getRank } from "../../deadlock/api.ts";
 import type { MatchHistoryEntry } from "../../deadlock/types.ts";
-import { getLinks, getMatchIds, getStoredMatch, getStreak, insertMatches, type Link, TRACKED_MATCH_MODES } from "../../db/mod.ts";
+import { getLinks, getMatchIds, getStoredMatch, getStreak, insertMatches, type Link, type Match } from "../../db/mod.ts";
 import { type MatchEvent, sendMatchEvent } from "./notify.ts";
 import { MAX_NOTIFY_AGE_S, POLL_INTERVAL_MS } from "../../config.ts";
 
@@ -11,19 +11,22 @@ interface Found {
     history: MatchHistoryEntry[];
 }
 
+// Rows added by the Valve ingest have no rank info yet, so keep refreshing recent ones from history
+const REFRESH_WINDOW_S = 24 * 60 * 60;
+
 let running = false;
 
 // Badge on a history entry is the badge going into the match, so the badge after is on the next ranked match
-async function badgeAfter(entry : MatchHistoryEntry, history : MatchHistoryEntry[]) {
+async function badgeAfter(match : Match, history : MatchHistoryEntry[]) {
     const next = history
-        .filter(x => x.match_mode == 4 && x.match_id > entry.match_id && x.ranked_display_badge)
+        .filter(x => x.match_mode == 4 && x.match_id > match.match_id && x.ranked_display_badge)
         .sort((a, b) => a.match_id - b.match_id)
         .at(0);
 
     if(next) return next.ranked_display_badge;
 
-    const rank = await getRank(entry.account_id).catch(() => undefined);
-    if(rank?.last_match?.match_id == entry.match_id) return rank.badge;
+    const rank = await getRank(match.account_id).catch(() => undefined);
+    if(rank?.last_match?.match_id == match.match_id) return rank.badge;
     return undefined;
 }
 
@@ -38,37 +41,40 @@ async function findMember(client : Client, userId : string) {
 async function findNew(link : Link) : Promise<Found[]> {
     const history = await getMatchHistory(link.account_id);
     const known = await getMatchIds(link.account_id);
+    const since = Date.now() / 1000 - REFRESH_WINDOW_S;
 
-    const fresh = history
-        .filter(x => TRACKED_MATCH_MODES.includes(x.match_mode) && !known.has(x.match_id))
+    // Only rows this call actually inserted, anything the Valve ingest got to first was already announced there
+    const fresh = (await insertMatches(history.filter(x => !known.has(x.match_id) || x.start_time >= since)))
         .sort((a, b) => a.match_id - b.match_id);
 
     if(fresh.length == 0) return [];
-    await insertMatches(fresh);
     console.log(`[Tracker] ${fresh.length} new match(es) for ${link.account_id}`);
 
     return fresh.map(x => ({ link, entry: x, history }));
 }
 
-async function toEvent(f : Found) : Promise<MatchEvent | undefined> {
-    const match = await getStoredMatch(f.link.account_id, f.entry.match_id);
-    if(!match) return undefined;
-
+async function toEvent(link : Link, match : Match, history : MatchHistoryEntry[]) : Promise<MatchEvent> {
     let deranked : number | undefined;
     if(!match.won && match.match_mode == 4 && match.badge) {
-        const after = await badgeAfter(f.entry, f.history);
+        const after = await badgeAfter(match, history);
         if(after && after < match.badge) deranked = after;
     }
 
-    console.log(`[Tracker] ${f.link.account_id} ${match.won ? "won" : "lost"} match ${match.match_id} (${match.kills}/${match.deaths}/${match.assists})${deranked != null ? " and deranked" : ""}`);
+    console.log(`[Tracker] ${link.account_id} ${match.won ? "won" : "lost"} match ${match.match_id} (${match.kills}/${match.deaths}/${match.assists})${deranked != null ? " and deranked" : ""}`);
 
     return {
-        link: f.link,
+        link,
         match,
-        streak: await getStreak(f.link.account_id, match.match_id),
-        previousStreak: await getStreak(f.link.account_id, match.match_id - 1),
+        streak: await getStreak(link.account_id, match.match_id),
+        previousStreak: await getStreak(link.account_id, match.match_id - 1),
         deranked
     };
+}
+
+// History is only used for the derank check, without it that falls back to the player's current rank
+export async function announceMatch(client : Client, link : Link, matchId : number, history : MatchHistoryEntry[] = []) {
+    const match = await getStoredMatch(link.account_id, matchId);
+    if(match) await sendMatchEvent(client, await toEvent(link, match, history));
 }
 
 async function poll(client : Client) {
@@ -96,8 +102,7 @@ async function poll(client : Client) {
             continue;
         }
 
-        const event = await toEvent(f);
-        if(event) await sendMatchEvent(client, event);
+        await announceMatch(client, f.link, f.entry.match_id, f.history);
     }
 
     console.log(`[Tracker] Polled ${links.length} account(s)${names.length > 0 ? ` (${names.join(", ")})` : ""}, ${found.length} new match(es)`);

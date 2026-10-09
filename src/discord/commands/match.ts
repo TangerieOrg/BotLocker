@@ -1,7 +1,7 @@
 import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { getMatch, getProfiles } from "../../deadlock/api.ts";
 import { heroName, rankName } from "../../deadlock/assets.ts";
-import { getLinkedMatchRows, getLinks } from "../../db/mod.ts";
+import { getLinkedMatchRows, getLinks, getMatchDetails } from "../../db/mod.ts";
 import { COLOURS, errorEmbed, formatDuration, modeName, TEAM_NAMES } from "../embeds.ts";
 import { formatSouls } from "../../lines/mod.ts";
 import { fetchMembers } from "../util.ts";
@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild)
     .addIntegerOption(x => x.setName("id").setDescription("Match ID").setRequired(true).setMinValue(1));
 
-// deadlock-api often has a match in player histories before it has the full match details
+// deadlock-api often has a match in player histories before it has the full match details (and nobody's ingest sent it)
 async function partialEmbed(interaction : ChatInputCommandInteraction, id : number) : Promise<APIEmbed> {
     const rows = await getLinkedMatchRows(id);
     const notReady = "deadlock-api hasn't processed the full match details yet. Try again later.";
@@ -37,7 +37,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     await interaction.deferReply();
 
     const id = interaction.options.getInteger("id", true);
-    const match = (await getMatch(id).catch(() => getMatch(id, true)).catch(() => undefined))?.match_info;
+    const match = (await getMatchDetails(id) ?? await getMatch(id).catch(() => getMatch(id, true)).catch(() => undefined))?.match_info;
     if(!match) return await interaction.editReply({ embeds: [await partialEmbed(interaction, id)] });
 
     const profiles = new Map((await getProfiles(match.players.map(x => x.account_id)).catch(() => [])).map(x => [x.account_id, x.personaname]));

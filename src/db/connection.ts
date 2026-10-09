@@ -64,6 +64,21 @@ await withDb(db => db.exec(`--sql
     );
 
     CREATE INDEX IF NOT EXISTS matches_account_time ON matches (account_id, start_time);
+
+    CREATE TABLE IF NOT EXISTS match_details (
+        match_id INTEGER PRIMARY KEY,
+        data TEXT NOT NULL,
+        fetched_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS match_salts (
+        match_id INTEGER PRIMARY KEY,
+        cluster INTEGER NOT NULL,
+        salt INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        attempts INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
 `));
 
 // Finalize every statement as soon as it's used, the handle is shared and only really closes with the last user

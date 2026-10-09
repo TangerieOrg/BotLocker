@@ -1,5 +1,6 @@
-import type { MatchHistoryEntry } from "../deadlock/types.ts";
-import { asDbFunction, stmt, withDb } from "./connection.ts";
+import type { Database } from "@db/sqlite";
+import type { MatchHistoryEntry, MatchMetadata } from "../deadlock/types.ts";
+import { asDbFunction, stmt } from "./connection.ts";
 import type { Match, Totals } from "./types.ts";
 
 // Unranked + Ranked only, skips bots, private lobbies, tutorials etc
@@ -9,31 +10,51 @@ export const getMatchIds = asDbFunction((db, accountId : number) => new Set(
     (stmt(db, "SELECT match_id FROM matches WHERE account_id = ?", s => s.all(accountId)) as { match_id: number }[]).map(x => x.match_id)
 ));
 
-export const insertMatches = (entries : MatchHistoryEntry[]) => withDb(db => {
-    stmt(db, `--sql
-        INSERT INTO matches (account_id, match_id, hero_id, start_time, won, kills, deaths, assists,
-            net_worth, last_hits, duration_s, game_mode, match_mode, badge, ranked_delta)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (account_id, match_id) DO UPDATE SET
-            won = excluded.won, badge = excluded.badge, ranked_delta = excluded.ranked_delta
-    `, insert => {
-        db.exec("BEGIN");
-        try {
-            for(const x of entries) {
-                if(!TRACKED_MATCH_MODES.includes(x.match_mode)) continue;
-                insert.run(
-                    x.account_id, x.match_id, x.hero_id, x.start_time, x.match_result == x.player_team ? 1 : 0,
-                    x.player_kills, x.player_deaths, x.player_assists, x.net_worth, x.last_hits,
-                    x.match_duration_s, x.game_mode, x.match_mode, x.ranked_display_badge, x.ranked_delta
-                );
-            }
-            db.exec("COMMIT");
-        } catch(err) {
-            db.exec("ROLLBACK");
-            throw err;
-        }
-    });
-});
+const INSERT_MATCH = `--sql
+    INSERT INTO matches (account_id, match_id, hero_id, start_time, won, kills, deaths, assists,
+        net_worth, last_hits, duration_s, game_mode, match_mode, badge, ranked_delta)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (account_id, match_id) DO NOTHING
+`;
+
+function transaction<R>(db : Database, func : () => R) : R {
+    db.exec("BEGIN");
+    try {
+        const r = func();
+        db.exec("COMMIT");
+        return r;
+    } catch(err) {
+        db.exec("ROLLBACK");
+        throw err;
+    }
+}
+
+// Returns only the entries that weren't stored yet, existing rows just get the rank info (the Valve path doesn't have it)
+export const insertMatches = asDbFunction((db, entries : MatchHistoryEntry[]) => stmt(db, INSERT_MATCH, insert => stmt(db, `--sql
+    UPDATE matches SET won = ?, badge = ?, ranked_delta = ? WHERE account_id = ? AND match_id = ?
+`, update => transaction(db, () => entries.filter(x => {
+    if(!TRACKED_MATCH_MODES.includes(x.match_mode)) return false;
+    const won = x.match_result == x.player_team ? 1 : 0;
+    const added = insert.run(
+        x.account_id, x.match_id, x.hero_id, x.start_time, won,
+        x.player_kills, x.player_deaths, x.player_assists, x.net_worth, x.last_hits,
+        x.match_duration_s, x.game_mode, x.match_mode, x.ranked_display_badge, x.ranked_delta
+    ) > 0;
+    if(!added) update.run(won, x.ranked_display_badge, x.ranked_delta, x.account_id, x.match_id);
+    return added;
+})))));
+
+// Rows straight from the match metadata, returns the ones that weren't stored yet
+export const insertMetaMatches = asDbFunction((db, meta : MatchMetadata, accountIds : number[]) => stmt(db, INSERT_MATCH, insert => {
+    const x = meta.match_info;
+    if(!TRACKED_MATCH_MODES.includes(x.match_mode)) return [];
+
+    return transaction(db, () => x.players.filter(p => accountIds.includes(p.account_id)).filter(p => insert.run(
+        p.account_id, x.match_id, p.hero_id, x.start_time, p.team == x.winning_team ? 1 : 0,
+        p.kills, p.deaths, p.assists, p.net_worth, p.last_hits,
+        x.duration_s, x.game_mode, x.match_mode, null, null
+    ) > 0).map(x => x.account_id));
+}));
 
 export const getRecentMatches = asDbFunction((db, accountId : number, limit : number = 10, streetBrawl? : boolean) => stmt(db, "SELECT * FROM matches WHERE account_id = ? AND (? IS NULL OR (game_mode = 4) = ?) ORDER BY match_id DESC LIMIT ?", s => s.all(accountId, streetBrawl == null ? null : Number(streetBrawl), streetBrawl == null ? null : Number(streetBrawl), limit)) as unknown as Match[]);
 

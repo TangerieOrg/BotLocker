@@ -1,5 +1,5 @@
 import { ActivityType, type Client } from "discord.js";
-import { getLatestLinkedMatch, getLinkedMatchRows, getLinks, getRecentMatches, getStreak, type Link } from "../db/mod.ts";
+import { getLatestLinkedMatch, getLinkedMatchRows, getLinks, getMatchDetails, getRecentMatches, getStreak, type Link } from "../db/mod.ts";
 import { getMatch } from "../deadlock/api.ts";
 import { heroName } from "../deadlock/assets.ts";
 import type { MatchMetadata } from "../deadlock/types.ts";
@@ -30,7 +30,7 @@ async function onlineLine(client : Client, link : Link, status : SteamStatus) {
 async function getMatchCached(matchId : number) {
     if(matchCache.matchId == matchId && (matchCache.meta || matchCache.retryAt > Date.now())) return matchCache.meta;
 
-    const meta = await getMatch(matchId).catch(() => undefined);
+    const meta = await getMatchDetails(matchId) ?? await getMatch(matchId).catch(() => undefined);
     matchCache = { matchId, meta, retryAt: Date.now() + 5 * 60 * 1000 };
     return meta;
 }
