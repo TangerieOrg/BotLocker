@@ -1,6 +1,5 @@
 import { ActivityType, type Client } from "discord.js";
 import { getLatestLinkedMatch, getLinkedMatchRows, getLinks, getMatchDetails, getRecentMatches, getStreak, type Link } from "../db/mod.ts";
-import { getMatch } from "../deadlock/api.ts";
 import { heroName } from "../deadlock/assets.ts";
 import type { MatchMetadata } from "../deadlock/types.ts";
 import { DEADLOCK_APP_ID, getSteamStatuses, type SteamStatus } from "../deadlock/steam.ts";
@@ -26,11 +25,11 @@ async function onlineLine(client : Client, link : Link, status : SteamStatus) {
     });
 }
 
-// Only the stored copy, never the Steam fallback (3/hour)
+// Only the stored copy, fetching it costs one of the limited game coordinator requests
 async function getMatchCached(matchId : number) {
     if(matchCache.matchId == matchId && (matchCache.meta || matchCache.retryAt > Date.now())) return matchCache.meta;
 
-    const meta = await getMatchDetails(matchId) ?? await getMatch(matchId).catch(() => undefined);
+    const meta = await getMatchDetails(matchId);
     matchCache = { matchId, meta, retryAt: Date.now() + 5 * 60 * 1000 };
     return meta;
 }
@@ -41,7 +40,7 @@ async function latestMatchLine(client : Client) {
 
     const players = new Map((await getLinkedMatchRows(latest.match_id)).map(x => [x.user_id, !!x.won]));
 
-    // Histories can lag behind the match (especially for players not friended with deadlock-api's bots), so fill in from the match itself
+    // Players who aren't friends with the Steam bot only show up in the match itself, so fill in from that
     const meta = await getMatchCached(latest.match_id);
     if(meta) {
         const links = await getLinks();

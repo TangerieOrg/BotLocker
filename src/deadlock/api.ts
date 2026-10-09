@@ -1,5 +1,6 @@
 import { SemaphoreQueue } from "@tangerie/utils/queue";
-import type { Hero, HeroStats, MatchHistoryEntry, MatchMetadata, PlayerRank, Rank, SteamProfile } from "./types.ts";
+// Only used for player name search and hero/rank assets, match data comes from Valve through the Steam bot
+import type { Hero, Rank, SteamProfile } from "./types.ts";
 import { DEADLOCK_API_KEY as API_KEY } from "../config.ts";
 
 const BASE_URL = "https://api.deadlock-api.com";
@@ -38,24 +39,12 @@ export const getProfiles = (ids : number[]) => ids.length == 0 ?
     Promise.resolve([] as SteamProfile[]) :
     request<SteamProfile[]>("/v1/players/steam", { account_ids: ids.join(",") });
 
-export const getProfile = (id : number) => getProfiles([id]).then(x => x.at(0));
-
 export const searchPlayers = (query : string, limit = 10) =>
     request<SteamProfile[]>("/v1/players/steam-search", {
         search_query: query,
         limit,
         min_matches_played_last_30d: 0
     }).catch(() => [] as SteamProfile[]);
-
-export const getMatchHistory = (id : number) => request<MatchHistoryEntry[]>(`/v1/players/${id}/match-history`);
-
-export const getHeroStats = (id : number, heroId? : number, gameMode : "normal" | "street_brawl" = "normal", since? : number) =>
-    request<HeroStats[]>("/v1/players/hero-stats", { account_ids: id, hero_ids: heroId, game_mode: gameMode, min_unix_timestamp: since || undefined });
-
-export const getRank = (id : number) => request<PlayerRank>(`/v1/players/${id}/rank`);
-
-// Steam fallback is limited to 3 requests/hour per IP, so only use it when asked
-export const getMatch = (id : number, steam = false) => request<MatchMetadata>(`/v1/matches/${id}/metadata`, { disable_steam: !steam });
 
 export const getHeroes = () => request<Hero[]>("/v1/assets/heroes", { only_active: true });
 

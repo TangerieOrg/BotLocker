@@ -71,6 +71,11 @@ await withDb(db => db.exec(`--sql
         fetched_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS kv (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS match_salts (
         match_id INTEGER PRIMARY KEY,
         cluster INTEGER NOT NULL,

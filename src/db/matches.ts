@@ -1,7 +1,7 @@
 import type { Database } from "@db/sqlite";
 import type { MatchHistoryEntry, MatchMetadata } from "../deadlock/types.ts";
 import { asDbFunction, stmt } from "./connection.ts";
-import type { Match, Totals } from "./types.ts";
+import type { HeroTotals, Match, Totals } from "./types.ts";
 
 // Unranked + Ranked only, skips bots, private lobbies, tutorials etc
 export const TRACKED_MATCH_MODES = [1, 4];
@@ -103,3 +103,14 @@ export const getStreak = asDbFunction((db, accountId : number, beforeMatchId : n
     }
     return first ? n : -n;
 });
+
+export const getHeroTotals = asDbFunction((db, accountId : number, heroId : number, since : number, streetBrawl : boolean) => stmt(db, `--sql
+    SELECT COUNT(*) AS matches, COALESCE(SUM(won), 0) AS wins,
+        COALESCE(SUM(kills), 0) AS kills, COALESCE(SUM(deaths), 0) AS deaths, COALESCE(SUM(assists), 0) AS assists,
+        COALESCE(SUM(net_worth), 0) AS net_worth, COALESCE(SUM(duration_s), 0) AS time_played, MAX(start_time) AS last_played
+    FROM matches WHERE account_id = ? AND hero_id = ? AND start_time >= ? AND (game_mode = 4) = ?
+`, s => s.get(accountId, heroId, since, Number(streetBrawl))) as unknown as HeroTotals);
+
+// Badge going into their latest ranked match, the closest thing to a current rank Valve gives out for other players
+export const getLatestBadge = asDbFunction((db, accountId : number) =>
+    (stmt(db, "SELECT badge FROM matches WHERE account_id = ? AND match_mode = 4 AND badge IS NOT NULL ORDER BY match_id DESC LIMIT 1", s => s.get(accountId)) as { badge: number } | undefined)?.badge);

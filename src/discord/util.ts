@@ -48,3 +48,12 @@ export async function isOwner(interaction : ChatInputCommandInteraction) {
     if(!owner) return false;
     return "members" in owner ? owner.members.has(interaction.user.id) : owner.id == interaction.user.id;
 }
+
+// Same owner as isOwner, for when there's no interaction to check against
+export async function getOwnerId(client : Client) {
+    if(OWNER_ID) return OWNER_ID;
+
+    const owner = (await client.application?.fetch())?.owner;
+    if(!owner) return undefined;
+    return "members" in owner ? owner.ownerId ?? undefined : owner.id;
+}

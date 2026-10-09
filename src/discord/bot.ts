@@ -5,7 +5,20 @@ import { handleMention } from "../features/mentions.ts";
 import { startPresence } from "../features/presence.ts";
 import { startTracker } from "../features/tracker/mod.ts";
 import { setIngestClient } from "../features/ingest.ts";
+import { startSteam, steamEvents } from "../steam/client.ts";
+import { getOwnerId } from "./util.ts";
 import { commands, handleInteraction, loadCommands } from "./commands.ts";
+
+// DMs the owner, the login waits until they send the code with /steamguard
+async function notifyGuard(client : Client, where : string, lastCodeWrong : boolean) {
+    const ownerId = await getOwnerId(client);
+    const owner = ownerId ? await client.users.fetch(ownerId).catch(() => undefined) : undefined;
+    if(!owner) return console.error("[Steam] Couldn't find the bot owner to ask for a Steam Guard code");
+
+    await owner.send(`${lastCodeWrong ? "That Steam Guard code was wrong. " : ""}The Steam bot needs a Steam Guard code (${where}). Send it with \`/steamguard code:<code>\``)
+        .then(() => console.log(`[Steam] Asked ${owner.username} for the Steam Guard code`))
+        .catch(err => console.error(`[Steam] Couldn't DM ${owner.username} for the Steam Guard code`, err));
+}
 
 export async function startBot() {
     if(!TOKEN) {
@@ -27,6 +40,8 @@ export async function startBot() {
         else await c.application.commands.set(body);
         console.log(`Registered ${body.length} commands${DEV_GUILD_ID ? ` to ${DEV_GUILD_ID}` : ""}`);
 
+        steamEvents.on("guardNeeded", (where : string, lastCodeWrong : boolean) => notifyGuard(c, where, lastCodeWrong));
+        startSteam();
         startTracker(c);
         setIngestClient(c);
         startPresence(c);

@@ -30,34 +30,6 @@ export interface MatchHistoryEntry {
     ranked_delta: number | null;
 }
 
-export interface HeroStats {
-    account_id: number;
-    hero_id: number;
-    matches_played: number;
-    last_played: number;
-    time_played: number;
-    wins: number;
-    kills: number;
-    deaths: number;
-    assists: number;
-    networth_per_min: number;
-    damage_per_min: number;
-    last_hits_per_min: number;
-    denies_per_match: number;
-    accuracy: number;
-    crit_shot_rate: number;
-}
-
-export interface PlayerRank {
-    badge: number;
-    rank: number;
-    subrank: number;
-    last_match: {
-        match_id: number,
-        start_time: number
-    } | null;
-}
-
 export interface MatchPlayer {
     account_id: number;
     player_slot: number;

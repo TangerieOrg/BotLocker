@@ -46,3 +46,14 @@ export interface MatchSalt {
     attempts: number;
     updated_at: number;
 }
+
+export interface HeroTotals {
+    matches: number;
+    wins: number;
+    kills: number;
+    deaths: number;
+    assists: number;
+    net_worth: number;
+    time_played: number;
+    last_played: number | null;
+}

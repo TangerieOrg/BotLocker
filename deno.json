@@ -4,6 +4,7 @@
         "start": "deno run -A src/main.ts",
         "check": "deno check src/main.ts src/discord/commands/*.ts ingest/main.ts scripts/*.ts",
         "fetch-match": "deno run --allow-net --allow-env scripts/fetch-match.ts",
+        "steam-test": "deno run -A scripts/steam-test.ts",
         "compile:ingest": "deno compile --target x86_64-pc-windows-msvc --no-terminal --allow-read --allow-write --allow-env --allow-net --allow-run=reg -o dist/botlocker-ingest.exe ingest/main.ts"
     },
     "imports": {
@@ -17,7 +18,8 @@
         "@tangerie/utils": "jsr:@tangerie/utils@^2.13.0",
         "@std/dotenv": "jsr:@std/dotenv@^0.225.5",
         "protobufjs": "npm:protobufjs@^8.8.0",
-        "seek-bzip": "npm:seek-bzip@^2.0.0"
+        "seek-bzip": "npm:seek-bzip@^2.0.0",
+        "steam-user": "npm:steam-user@5.3.0"
     },
     "nodeModulesDir": "auto"
 }

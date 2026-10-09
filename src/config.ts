@@ -24,6 +24,14 @@ export const DATA_DIR = Deno.env.get("DATA_DIR") ?? "./data";
 export const DEADLOCK_API_KEY = Deno.env.get("DEADLOCK_API_KEY");
 export const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY");
 
-export const POLL_INTERVAL_MS = getNumber("POLL_INTERVAL_MS") ?? 120000;
+// Dedicated Steam account (with Deadlock access) that pulls match data from the game coordinator
+export const STEAM_BOT_USERNAME = Deno.env.get("STEAM_BOT_USERNAME");
+export const STEAM_BOT_PASSWORD = Deno.env.get("STEAM_BOT_PASSWORD");
+// Skips Steam Guard on a new server, deno task steam-test prints one after logging in
+export const STEAM_BOT_REFRESH_TOKEN = Deno.env.get("STEAM_BOT_REFRESH_TOKEN");
+export const STEAM_BOT_GUARD_CODE = Deno.env.get("STEAM_BOT_GUARD_CODE");
+
+// Backstop poll, matches are normally picked up when a friend stops playing
+export const GC_POLL_INTERVAL_MS = getNumber("GC_POLL_INTERVAL_MS") ?? 15 * 60 * 1000;
 export const MAX_NOTIFY_AGE_S = (getNumber("MAX_NOTIFY_AGE_H") ?? 6) * 60 * 60;
 export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;

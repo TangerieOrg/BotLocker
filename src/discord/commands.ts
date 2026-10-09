@@ -22,7 +22,8 @@ export async function handleInteraction(interaction : Interaction) {
             return await interaction.reply({ embeds: [errorEmbed("Error", "Invalid Command")], flags: MessageFlags.Ephemeral });
         }
 
-        const args = interaction.options.data.map(x => ` ${x.name}:${x.value}`).join("");
+        // Steam Guard codes stay out of the logs
+        const args = interaction.options.data.map(x => ` ${x.name}:${x.name == "code" ? "***" : x.value}`).join("");
         console.log(`[Command] ${interaction.user.username} ran /${interaction.commandName}${args} in ${interaction.guild?.name ?? "DM"}`);
 
         try {

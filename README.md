@@ -16,9 +16,20 @@ Env vars come from the `BotLockerEnv` docker secret (same format as `.env`), cre
 docker secret create BotLockerEnv .env
 ```
 
+## Steam bot
+
+Match data comes straight from Valve through a dedicated Steam account (needs Deadlock access, no Steam Guard) that talks to the Deadlock game coordinator. deadlock-api.com is only used for player name search and hero/rank assets
+
+- Set `STEAM_BOT_USERNAME` and `STEAM_BOT_PASSWORD`, the login token it gets is saved in the database after the first login
+- `/link` sends the player a friend request from the bot, their match history is only visible once they accept (the bot also accepts requests from linked players)
+- When a friend stops playing Deadlock the bot checks their history and announces the match, then fetches the full scoreboard for `/match`
+- Every linked account is also polled every `GC_POLL_INTERVAL_MS` (15 minutes) in case it missed something
+- Valve doesn't publish its limits, so full scoreboards are capped at 40 a day
+- `deno task steam-test <account_id>` logs in and runs each request once, run this first with a new account
+
 ## Match ingest
 
-Instead of waiting for deadlock-api.com, matches can be pulled straight from Valve using the salts in the Steam client's download cache
+Matches can also be pulled straight from Valve using the salts in the Steam client's download cache
 
 - `POST /ingest/salts` takes `[{ match_id, cluster_id, metadata_salt }]` (same shape as deadlock-api's), fetches the `.meta.bz2` from Valve, stores it and announces it for any linked players
 - `GET /ingest/salts/:matchId` shows how that went

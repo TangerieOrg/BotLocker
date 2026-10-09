@@ -1,7 +1,9 @@
 import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { getMatch, getProfiles } from "../../deadlock/api.ts";
+import { getValveMatch } from "../../deadlock/valve.ts";
+import { getPersonas, steamReady } from "../../steam/client.ts";
+import { getGcSalts } from "../../steam/gc.ts";
 import { heroName, rankName } from "../../deadlock/assets.ts";
-import { getLinkedMatchRows, getLinks, getMatchDetails } from "../../db/mod.ts";
+import { getLinkedMatchRows, getLinks, getMatchDetails, saveMatchDetails } from "../../db/mod.ts";
 import { COLOURS, errorEmbed, formatDuration, modeName, TEAM_NAMES } from "../embeds.ts";
 import { formatSouls } from "../../lines/mod.ts";
 import { fetchMembers } from "../util.ts";
@@ -12,10 +14,26 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild)
     .addIntegerOption(x => x.setName("id").setDescription("Match ID").setRequired(true).setMinValue(1));
 
-// deadlock-api often has a match in player histories before it has the full match details (and nobody's ingest sent it)
+// Fetches and stores the full scoreboard from Valve if we don't have it yet
+async function loadMatch(id : number) {
+    const stored = await getMatchDetails(id);
+    if(stored || !steamReady()) return stored;
+
+    try {
+        const salts = await getGcSalts(id);
+        const meta = await getValveMatch(id, salts.cluster_id, salts.metadata_salt);
+        await saveMatchDetails(meta);
+        return meta;
+    } catch(err) {
+        console.log(`[Command] Couldn't load match ${id}: ${(err as Error).message}`);
+        return undefined;
+    }
+}
+
+// Valve can take a few minutes to process the full match details, or the daily limit on fetching them is used up
 async function partialEmbed(interaction : ChatInputCommandInteraction, id : number) : Promise<APIEmbed> {
     const rows = await getLinkedMatchRows(id);
-    const notReady = "deadlock-api hasn't processed the full match details yet. Try again later.";
+    const notReady = "The full match details aren't available yet. Try again later.";
     if(rows.length == 0) return errorEmbed("Match Not Found", notReady);
 
     const members = await fetchMembers(interaction.guild!, rows.map(x => x.user_id));
@@ -37,10 +55,10 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     await interaction.deferReply();
 
     const id = interaction.options.getInteger("id", true);
-    const match = (await getMatchDetails(id) ?? await getMatch(id).catch(() => getMatch(id, true)).catch(() => undefined))?.match_info;
+    const match = (await loadMatch(id))?.match_info;
     if(!match) return await interaction.editReply({ embeds: [await partialEmbed(interaction, id)] });
 
-    const profiles = new Map((await getProfiles(match.players.map(x => x.account_id)).catch(() => [])).map(x => [x.account_id, x.personaname]));
+    const profiles = await getPersonas(match.players.map(x => x.account_id));
     const linked = new Map((await getLinks()).map(x => [x.account_id, x.user_id]));
     const members = await fetchMembers(interaction.guild!, match.players.filter(x => linked.has(x.account_id)).map(x => linked.get(x.account_id)!));
 
@@ -52,7 +70,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
         const lines = await Promise.all(players.map(async x => {
             const member = members.get(linked.get(x.account_id) ?? "");
-            const name = (member?.displayName ?? profiles.get(x.account_id) ?? "Anonymous").slice(0, 20);
+            const name = (member?.displayName ?? profiles.get(x.account_id)?.name ?? "Anonymous").slice(0, 20);
             const souls = match.game_mode == 4 ? "" : ` (${formatSouls(x.net_worth)})`;
             const line = `${await heroName(x.hero_id)} - ${name} ${x.kills}/${x.deaths}/${x.assists}${souls}`;
             return member ? `**${line}**` : line;

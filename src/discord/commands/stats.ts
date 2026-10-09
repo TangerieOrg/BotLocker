@@ -1,7 +1,8 @@
 import { type APIEmbed, type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { getHeroStats, getProfile, getRank } from "../../deadlock/api.ts";
+import { getPersonas } from "../../steam/client.ts";
+import { getCurrentRank } from "../../steam/gc.ts";
 import { hero, rankInfo, searchHeroes } from "../../deadlock/assets.ts";
-import { getGuild, getRecentMatches, getStreak, getTotals } from "../../db/mod.ts";
+import { getGuild, getHeroTotals, getRecentMatches, getStreak, getTotals } from "../../db/mod.ts";
 import { COLOURS, errorEmbed, formatStreak, percent, ratio, totalsFields } from "../embeds.ts";
 import { getTargetLink } from "../util.ts";
 
@@ -18,8 +19,8 @@ const PERIODS = {
 type Period = keyof typeof PERIODS;
 
 const MODES = [
-    { name: "Standard", streetBrawl: false, gameMode: "normal" },
-    { name: "Street Brawl", streetBrawl: true, gameMode: "street_brawl" }
+    { name: "Standard", streetBrawl: false },
+    { name: "Street Brawl", streetBrawl: true }
 ] as const;
 
 export const data = new SlashCommandBuilder()
@@ -51,8 +52,8 @@ async function heroEmbeds(accountId : number, name : string, heroId : number, si
 
     const embeds : APIEmbed[] = [];
     for(const mode of MODES) {
-        const stats = (await getHeroStats(accountId, heroId, mode.gameMode, since)).at(0);
-        if(!stats || stats.matches_played == 0) continue;
+        const stats = await getHeroTotals(accountId, heroId, since, mode.streetBrawl);
+        if(stats.matches == 0) continue;
 
         embeds.push({
             title: `${name}'s ${h.name} Stats - ${mode.name}`,
@@ -60,15 +61,13 @@ async function heroEmbeds(accountId : number, name : string, heroId : number, si
             color: COLOURS.gold,
             thumbnail: { url: h.images.icon_image_small },
             fields: [
-                { name: "Matches", value: stats.matches_played.toString(), inline: true },
+                { name: "Matches", value: stats.matches.toString(), inline: true },
                 { name: "Wins", value: stats.wins.toString(), inline: true },
-                { name: "Losses", value: (stats.matches_played - stats.wins).toString(), inline: true },
-                { name: "Win Rate", value: percent(stats.wins, stats.matches_played), inline: true },
+                { name: "Losses", value: (stats.matches - stats.wins).toString(), inline: true },
+                { name: "Win Rate", value: percent(stats.wins, stats.matches), inline: true },
                 { name: "K/D/A", value: `${stats.kills}/${stats.deaths}/${stats.assists}`, inline: true },
                 { name: "KDA", value: ratio(stats.kills + stats.assists, stats.deaths), inline: true },
-                ...(mode.streetBrawl ? [] : [{ name: "Souls/Min", value: Math.round(stats.networth_per_min).toString(), inline: true }]),
-                { name: "Damage/Min", value: Math.round(stats.damage_per_min).toString(), inline: true },
-                { name: "Accuracy", value: `${Math.round(stats.accuracy * 100)}%`, inline: true },
+                ...(mode.streetBrawl ? [] : [{ name: "Souls/Min", value: stats.time_played ? Math.round(stats.net_worth * 60 / stats.time_played).toString() : "-", inline: true }]),
                 { name: "Time Played", value: `${Math.round(stats.time_played / 3600)}h`, inline: true },
                 { name: "Last Played", value: `<t:${stats.last_played}:R>`, inline: true }
             ]
@@ -90,15 +89,14 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const since = await sinceFor(period, interaction.guildId!);
 
     const member = await interaction.guild!.members.fetch(link.user_id).catch(() => undefined);
-    const name = member?.displayName ?? (await getProfile(link.account_id).catch(() => undefined))?.personaname ?? link.account_id.toString();
+    const name = member?.displayName ?? (await getPersonas([link.account_id])).get(link.account_id)?.name ?? link.account_id.toString();
 
     const heroId = interaction.options.getInteger("hero");
     if(heroId != null) {
         return await interaction.editReply({ embeds: await heroEmbeds(link.account_id, name, heroId, since, periodName) });
     }
 
-    const rank = await getRank(link.account_id).catch(() => undefined);
-    const info = await rankInfo(rank?.badge);
+    const info = await rankInfo(await getCurrentRank(link.account_id));
 
     const embeds : APIEmbed[] = [];
     for(const mode of MODES) {
