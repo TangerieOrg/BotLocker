@@ -1,7 +1,7 @@
 // deno task steam-test <account_id>
 // Logs the Steam bot in and runs each game coordinator request once, the account must be friends with the bot for history
 import { getRefreshToken, startSteam, steamReady } from "../src/steam/client.ts";
-import { getGcHistory, getGcRank, getGcSalts, metadataRemaining } from "../src/steam/gc.ts";
+import { getGcHistory, getGcSalts, metadataRemaining } from "../src/steam/gc.ts";
 import { getValveMatch } from "../src/deadlock/valve.ts";
 
 const accountId = Number(Deno.args[0]);
@@ -35,7 +35,6 @@ const step = async <T>(name : string, fn : () => Promise<T>) => {
 };
 
 const history = await step("History (first 3)", () => getGcHistory(accountId).then(x => ({ ...x, matches: x.matches.slice(0, 3) })));
-await step("Rank", () => getGcRank(accountId));
 
 const latest = history?.matches.at(0);
 if(latest) {

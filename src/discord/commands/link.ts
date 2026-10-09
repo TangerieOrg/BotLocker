@@ -1,11 +1,11 @@
 import { type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, MessageFlags, SlashCommandBuilder } from "discord.js";
-import { getProfiles, searchPlayers } from "../../deadlock/api.ts";
+import { getMatchHistory, getProfile, getProfiles, searchPlayers } from "../../deadlock/api.ts";
 import { rankInfo } from "../../deadlock/assets.ts";
 import { parseAccount } from "../../deadlock/steam.ts";
-import { getLinkByAccount, getStreak, setLink } from "../../db/mod.ts";
+import { getLinkByAccount, getStreak, insertMatches, setLink } from "../../db/mod.ts";
 import { addFriend, botProfileUrl, getPersonas, steamReady } from "../../steam/client.ts";
-import { getCurrentRank } from "../../steam/gc.ts";
 import { backfill } from "../../features/tracker/mod.ts";
+import { getCurrentRank } from "../../features/rank.ts";
 import { errorEmbed, formatStreak, successEmbed } from "../embeds.ts";
 
 export const data = new SlashCommandBuilder()
@@ -39,13 +39,16 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     await linkAccount(interaction, interaction.user.id);
 }
 
-export async function linkAccount(interaction : ChatInputCommandInteraction, userId : string) {
-    if(!steamReady()) {
-        return await interaction.editReply({ embeds: [errorEmbed("Steam Bot Offline", "The Steam bot isn't connected right now, try again in a minute")] });
-    }
+// deadlock-api first for the profile and history, the Steam bot fills in anything it doesn't have
+async function findProfile(accountId : number) {
+    const profile = await getProfile(accountId).catch(() => undefined);
+    if(profile) return { name: profile.personaname, avatar: profile.avatarfull };
+    return steamReady() ? (await getPersonas([accountId])).get(accountId) : undefined;
+}
 
+export async function linkAccount(interaction : ChatInputCommandInteraction, userId : string) {
     const accountId = await parseAccount(interaction.options.getString("player", true));
-    const profile = accountId != null ? (await getPersonas([accountId])).get(accountId) : undefined;
+    const profile = accountId != null ? await findProfile(accountId) : undefined;
     if(accountId == null || !profile) {
         console.log(`[Link] Couldn't find a profile for "${interaction.options.getString("player", true)}"`);
         return await interaction.editReply({ embeds: [errorEmbed("Profile Not Found")] });
@@ -56,14 +59,17 @@ export async function linkAccount(interaction : ChatInputCommandInteraction, use
         return await interaction.editReply({ embeds: [errorEmbed("Account Already Linked", `That account is linked to <@${existing.user_id}>`)] });
     }
 
+    const history = await getMatchHistory(accountId).catch(() => []);
+    await insertMatches(history);
     await setLink(userId, accountId);
-    const friend = await addFriend(accountId);
 
-    // Their history is only visible once they're friends with the bot, otherwise it's backfilled when they accept
-    const matches = friend == "friends" ? await backfill(accountId).catch(() => 0) : 0;
-    console.log(`[Link] ${interaction.user.username} linked ${userId == interaction.user.id ? "themselves" : `<${userId}>`} to ${profile.name} (${accountId}), friend request ${friend ?? "failed"}, ${matches} matches in history`);
+    const friend = steamReady() ? await addFriend(accountId) : undefined;
 
-    const info = await rankInfo(friend == "friends" ? await getCurrentRank(accountId) : undefined);
+    // Steam bot history only if deadlock-api had nothing, and it needs them to be friends
+    const matches = history.length > 0 ? history.length : friend == "friends" ? await backfill(accountId).catch(() => 0) : 0;
+    console.log(`[Link] ${interaction.user.username} linked ${userId == interaction.user.id ? "themselves" : `<${userId}>`} to ${profile.name} (${accountId}), friend request ${friend ?? "not sent"}, ${matches} matches in history`);
+
+    const info = await rankInfo(await getCurrentRank(accountId));
 
     const embed = successEmbed("Profile Linked Successfully", userId == interaction.user.id ? undefined : `Linked <@${userId}>`);
     if(profile.avatar) embed.thumbnail = { url: profile.avatar };
@@ -74,12 +80,11 @@ export async function linkAccount(interaction : ChatInputCommandInteraction, use
     ];
 
     const bot = botProfileUrl();
-    const note = friend == "friends" ?
-        undefined :
-        friend == "sent" ?
-            `**Accept the friend request from the [BotLocker Steam account](${bot}) on Steam**, matches can't be tracked until you do.` :
-            `Couldn't send a friend request, **add the [BotLocker Steam account](${bot}) as a friend on Steam** so matches can be tracked.`;
-    if(note) embed.description = (embed.description ? embed.description + "\n\n" : "") + note;
+    const notes : string[] = [];
+    if(friend == "sent") notes.push(`**Accept the friend request from the [BotLocker Steam account](${bot}) on Steam** so your matches get announced straight away.`);
+    else if(friend == undefined && bot) notes.push(`**Add the [BotLocker Steam account](${bot}) as a friend on Steam** so your matches get announced straight away.`);
+    if(friend != "friends") notes.push("Until then match data comes from deadlock-api.com, which can lag behind.");
+    if(notes.length > 0) embed.description = (embed.description ? embed.description + "\n\n" : "") + notes.join(" ");
 
     await interaction.editReply({ embeds: [embed] });
 }

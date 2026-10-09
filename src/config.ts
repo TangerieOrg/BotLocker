@@ -31,7 +31,8 @@ export const STEAM_BOT_PASSWORD = Deno.env.get("STEAM_BOT_PASSWORD");
 export const STEAM_BOT_REFRESH_TOKEN = Deno.env.get("STEAM_BOT_REFRESH_TOKEN");
 export const STEAM_BOT_GUARD_CODE = Deno.env.get("STEAM_BOT_GUARD_CODE");
 
-// Backstop poll, matches are normally picked up when a friend stops playing
-export const GC_POLL_INTERVAL_MS = getNumber("GC_POLL_INTERVAL_MS") ?? 15 * 60 * 1000;
+// deadlock-api is polled often since it's free, the Steam bot only rarely as a backstop (it's normally asked when a friend stops playing)
+export const POLL_INTERVAL_MS = getNumber("POLL_INTERVAL_MS") ?? 2 * 60 * 1000;
+export const GC_POLL_INTERVAL_MS = getNumber("GC_POLL_INTERVAL_MS") ?? 60 * 60 * 1000;
 export const MAX_NOTIFY_AGE_S = (getNumber("MAX_NOTIFY_AGE_H") ?? 6) * 60 * 60;
 export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;

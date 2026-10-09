@@ -1,9 +1,9 @@
 import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { getValveMatch } from "../../deadlock/valve.ts";
+import { getProfiles } from "../../deadlock/api.ts";
 import { getPersonas, steamReady } from "../../steam/client.ts";
-import { getGcSalts } from "../../steam/gc.ts";
+import { loadScoreboard } from "../../features/scoreboard.ts";
 import { heroName, rankName } from "../../deadlock/assets.ts";
-import { getLinkedMatchRows, getLinks, getMatchDetails, saveMatchDetails } from "../../db/mod.ts";
+import { getLinkedMatchRows, getLinks } from "../../db/mod.ts";
 import { COLOURS, errorEmbed, formatDuration, modeName, TEAM_NAMES } from "../embeds.ts";
 import { formatSouls } from "../../lines/mod.ts";
 import { fetchMembers } from "../util.ts";
@@ -14,20 +14,14 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild)
     .addIntegerOption(x => x.setName("id").setDescription("Match ID").setRequired(true).setMinValue(1));
 
-// Fetches and stores the full scoreboard from Valve if we don't have it yet
-async function loadMatch(id : number) {
-    const stored = await getMatchDetails(id);
-    if(stored || !steamReady()) return stored;
-
-    try {
-        const salts = await getGcSalts(id);
-        const meta = await getValveMatch(id, salts.cluster_id, salts.metadata_salt);
-        await saveMatchDetails(meta);
-        return meta;
-    } catch(err) {
-        console.log(`[Command] Couldn't load match ${id}: ${(err as Error).message}`);
-        return undefined;
+// deadlock-api names first, the Steam bot for anyone it doesn't know
+async function playerNames(accountIds : number[]) {
+    const names = new Map((await getProfiles(accountIds).catch(() => [])).map(x => [x.account_id, x.personaname]));
+    const missing = accountIds.filter(x => !names.has(x));
+    if(missing.length > 0 && steamReady()) {
+        for(const [id, p] of await getPersonas(missing)) names.set(id, p.name);
     }
+    return names;
 }
 
 // Valve can take a few minutes to process the full match details, or the daily limit on fetching them is used up
@@ -55,10 +49,10 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     await interaction.deferReply();
 
     const id = interaction.options.getInteger("id", true);
-    const match = (await loadMatch(id))?.match_info;
+    const match = (await loadScoreboard(id, { cooldown: true }))?.match_info;
     if(!match) return await interaction.editReply({ embeds: [await partialEmbed(interaction, id)] });
 
-    const profiles = await getPersonas(match.players.map(x => x.account_id));
+    const profiles = await playerNames(match.players.map(x => x.account_id));
     const linked = new Map((await getLinks()).map(x => [x.account_id, x.user_id]));
     const members = await fetchMembers(interaction.guild!, match.players.filter(x => linked.has(x.account_id)).map(x => linked.get(x.account_id)!));
 
@@ -70,7 +64,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
         const lines = await Promise.all(players.map(async x => {
             const member = members.get(linked.get(x.account_id) ?? "");
-            const name = (member?.displayName ?? profiles.get(x.account_id)?.name ?? "Anonymous").slice(0, 20);
+            const name = (member?.displayName ?? profiles.get(x.account_id) ?? "Anonymous").slice(0, 20);
             const souls = match.game_mode == 4 ? "" : ` (${formatSouls(x.net_worth)})`;
             const line = `${await heroName(x.hero_id)} - ${name} ${x.kills}/${x.deaths}/${x.assists}${souls}`;
             return member ? `**${line}**` : line;

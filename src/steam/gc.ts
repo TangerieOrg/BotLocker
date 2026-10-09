@@ -1,7 +1,7 @@
 import protobuf from "protobufjs";
 import { SemaphoreQueue } from "@tangerie/utils/queue";
 import { gcJob } from "./client.ts";
-import { getKv, getLatestBadge, setKv } from "../db/mod.ts";
+import { getKv, setKv } from "../db/mod.ts";
 import type { MatchHistoryEntry } from "../deadlock/types.ts";
 
 // Just what we use from citadel_gcmessages_client.proto (SteamDatabase/GameTracking-Deadlock), enums as plain ints
@@ -23,14 +23,11 @@ message GetMatchMetaData { optional uint64 match_id = 1; }
 message GetMatchMetaDataResponse {
   optional int32 result = 1; optional uint32 replay_salt = 2; optional uint32 metadata_salt = 3; optional uint32 replay_group_id = 5;
 }
-message GetProfileCard { optional uint32 account_id = 1; }
-message ProfileCard { optional uint32 account_id = 1; optional uint32 ranked_badge_level = 3; }
 `;
 
 const MSG = {
     history: [9112, 9113],
-    metadata: [9167, 9168],
-    profile: [9024, 9025]
+    metadata: [9167, 9168]
 } as const;
 
 type Kind = keyof typeof MSG;
@@ -55,7 +52,7 @@ const root = protobuf.parse(PROTO, { keepCase: true }).root;
 const MIN_GAP_MS = 2000;
 const METADATA_GAP_MS = 20000;
 const METADATA_DAILY_CAP = 40;
-const PAUSE_MS : Record<Kind, number> = { history: 60 * 60 * 1000, profile: 60 * 60 * 1000, metadata: 24 * 60 * 60 * 1000 };
+const PAUSE_MS : Record<Kind, number> = { history: 60 * 60 * 1000, metadata: 24 * 60 * 60 * 1000 };
 const METADATA_KEY = "gc_metadata_requests";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -94,8 +91,7 @@ function request(kind : Kind, req : string, res : string, body : Record<string, 
         const raw = await gcJob(MSG[kind][0], reqType.encode(reqType.create(body)).finish());
         const out = resType.toObject(resType.decode(raw), { longs: Number });
 
-        // The profile card has no result field, an empty one means it failed
-        const result = out.result ?? (kind == "profile" ? GcResult.Success : 0);
+        const result = out.result ?? 0;
         if(result == GcResult.RateLimited) {
             pausedUntil[kind] = Date.now() + PAUSE_MS[kind];
             console.error(`[GC] Rate limited on ${kind}, pausing for ${PAUSE_MS[kind] / 60000}m`);
@@ -145,14 +141,4 @@ export async function getGcSalts(matchId : number) {
         metadata_salt: out.metadata_salt as number,
         replay_salt: out.replay_salt as number | undefined
     };
-}
-
-export async function getGcRank(accountId : number) : Promise<number | undefined> {
-    const out = await request("profile", "GetProfileCard", "ProfileCard", { account_id: accountId });
-    return out.ranked_badge_level || undefined;
-}
-
-// The profile card only sometimes includes the rank, fall back to their latest ranked match
-export async function getCurrentRank(accountId : number) {
-    return await getGcRank(accountId).catch(() => undefined) ?? await getLatestBadge(accountId);
 }

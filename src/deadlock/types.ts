@@ -30,6 +30,16 @@ export interface MatchHistoryEntry {
     ranked_delta: number | null;
 }
 
+export interface PlayerRank {
+    badge: number;
+    rank: number;
+    subrank: number;
+    last_match: {
+        match_id: number,
+        start_time: number
+    } | null;
+}
+
 export interface MatchPlayer {
     account_id: number;
     player_slot: number;

@@ -16,16 +16,17 @@ Env vars come from the `BotLockerEnv` docker secret (same format as `.env`), cre
 docker secret create BotLockerEnv .env
 ```
 
-## Steam bot
+## Match data
 
-Match data comes straight from Valve through a dedicated Steam account (needs Deadlock access, no Steam Guard) that talks to the Deadlock game coordinator. deadlock-api.com is only used for player name search and hero/rank assets
+deadlock-api.com is checked first for everything since it's free, but it can lag behind. A dedicated Steam account (needs Deadlock access) fills the gaps by asking the Deadlock game coordinator directly, its requests are limited so it's only used when deadlock-api doesn't have something yet
 
-- Set `STEAM_BOT_USERNAME` and `STEAM_BOT_PASSWORD`, the login token it gets is saved in the database after the first login
-- `/link` sends the player a friend request from the bot, their match history is only visible once they accept (the bot also accepts requests from linked players)
-- When a friend stops playing Deadlock the bot checks their history and announces the match, then fetches the full scoreboard for `/match`
-- Every linked account is also polled every `GC_POLL_INTERVAL_MS` (15 minutes) in case it missed something
-- Valve doesn't publish its limits, so full scoreboards are capped at 40 a day
-- `deno task steam-test <account_id>` logs in and runs each request once, run this first with a new account
+- deadlock-api history is polled every `POLL_INTERVAL_MS` (2 minutes)
+- When a linked friend of the Steam bot stops playing Deadlock, their history is checked (deadlock-api, then the Steam bot) a few times over the next 10 minutes
+- The Steam bot also checks everyone every `GC_POLL_INTERVAL_MS` (1 hour) as a backstop
+- Full scoreboards for `/match` come from storage, then deadlock-api, then the Steam bot (capped at 40 a day)
+- Set `STEAM_BOT_USERNAME` and `STEAM_BOT_PASSWORD` to enable the Steam bot. If it needs a Steam Guard code it DMs the owner, send it with `/steamguard`. The login token is saved after that
+- `/link` sends the player a friend request from the Steam bot, their matches only come through it once they accept
+- `deno task steam-test <account_id>` checks the Steam bot end to end
 
 ## Match ingest
 

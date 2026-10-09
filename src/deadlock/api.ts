@@ -1,6 +1,6 @@
 import { SemaphoreQueue } from "@tangerie/utils/queue";
-// Only used for player name search and hero/rank assets, match data comes from Valve through the Steam bot
-import type { Hero, Rank, SteamProfile } from "./types.ts";
+// Checked first for everything since it's free, the Steam bot only fills in what it doesn't have yet (it lags behind)
+import type { Hero, MatchHistoryEntry, MatchMetadata, PlayerRank, Rank, SteamProfile } from "./types.ts";
 import { DEADLOCK_API_KEY as API_KEY } from "../config.ts";
 
 const BASE_URL = "https://api.deadlock-api.com";
@@ -39,12 +39,21 @@ export const getProfiles = (ids : number[]) => ids.length == 0 ?
     Promise.resolve([] as SteamProfile[]) :
     request<SteamProfile[]>("/v1/players/steam", { account_ids: ids.join(",") });
 
+export const getProfile = (id : number) => getProfiles([id]).then(x => x.at(0));
+
 export const searchPlayers = (query : string, limit = 10) =>
     request<SteamProfile[]>("/v1/players/steam-search", {
         search_query: query,
         limit,
         min_matches_played_last_30d: 0
     }).catch(() => [] as SteamProfile[]);
+
+export const getMatchHistory = (id : number) => request<MatchHistoryEntry[]>(`/v1/players/${id}/match-history`);
+
+export const getRank = (id : number) => request<PlayerRank>(`/v1/players/${id}/rank`);
+
+// Never their Steam fallback (3 requests/hour per IP), the Steam bot covers that
+export const getMatch = (id : number) => request<MatchMetadata>(`/v1/matches/${id}/metadata`, { disable_steam: true });
 
 export const getHeroes = () => request<Hero[]>("/v1/assets/heroes", { only_active: true });
 

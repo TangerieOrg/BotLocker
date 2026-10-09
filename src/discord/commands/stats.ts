@@ -1,6 +1,7 @@
 import { type APIEmbed, type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { getProfile } from "../../deadlock/api.ts";
 import { getPersonas } from "../../steam/client.ts";
-import { getCurrentRank } from "../../steam/gc.ts";
+import { getCurrentRank } from "../../features/rank.ts";
 import { hero, rankInfo, searchHeroes } from "../../deadlock/assets.ts";
 import { getGuild, getHeroTotals, getRecentMatches, getStreak, getTotals } from "../../db/mod.ts";
 import { COLOURS, errorEmbed, formatStreak, percent, ratio, totalsFields } from "../embeds.ts";
@@ -89,7 +90,10 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const since = await sinceFor(period, interaction.guildId!);
 
     const member = await interaction.guild!.members.fetch(link.user_id).catch(() => undefined);
-    const name = member?.displayName ?? (await getPersonas([link.account_id])).get(link.account_id)?.name ?? link.account_id.toString();
+    const name = member?.displayName ??
+        (await getProfile(link.account_id).catch(() => undefined))?.personaname ??
+        (await getPersonas([link.account_id])).get(link.account_id)?.name ??
+        link.account_id.toString();
 
     const heroId = interaction.options.getInteger("hero");
     if(heroId != null) {
