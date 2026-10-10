@@ -1,10 +1,10 @@
 import { GC_POLL_INTERVAL_MS } from "../config.ts";
 import { logger } from "../helpers/log.ts";
-import { diffSet, setEquals, watch, watchAll } from "../helpers/store.ts";
+import { diffMap, diffSet, setEquals, watch, watchAll } from "../helpers/store.ts";
 import { LinkStore, linkedAccounts } from "../links/LinkStore.ts";
 import { isFriend, SteamStore } from "../steam/SteamStore.ts";
 import { syncHistory } from "./history.ts";
-import { cancelFollowUp, type Check, finish, followUp, queue, recorded, TrackerStore } from "./TrackerStore.ts";
+import { type Check, finish, followUp, queue, recorded, TrackerStore } from "./TrackerStore.ts";
 
 // History can take a bit to include the match after someone closes the game
 const CHECK_DELAYS_MS = [30, 120, 300, 600].map(x => x * 1000);
@@ -75,14 +75,12 @@ export function startTracker() {
         for(const id of diffSet(cur, prev).added) queue(id, Date.now());
     }, setEquals);
 
-    // Someone's round just ended (or they closed the game), check a few times until the match shows up. Starting another cancels it
-    watch(SteamStore, s => s.inMatch, (cur, prev) => {
-        const { added, removed } = diffSet(cur, prev);
-        for(const id of added) cancelFollowUp(id);
-
+    // Someone's round just ended (or they closed the game), check a few times until the match shows up.
+    // Already being in the next one doesn't matter, the last one still needs checking
+    watch(SteamStore, s => s.finished, (cur, prev) => {
         const tracked = trackedAccounts();
-        for(const id of removed.filter(x => tracked.has(x))) {
-            log(`${id} left a match, checking for it`);
+        for(const [id] of diffMap(cur, prev).changed.filter(([x]) => tracked.has(x))) {
+            log(`${id} finished a match, checking for it`);
             followUp(id, 0, Date.now() + CHECK_DELAYS_MS[0]);
         }
     });

@@ -45,6 +45,12 @@ export const sameRich = (a? : Readonly<Record<string, string>>, b? : Readonly<Re
 // Closing the game mid-round still counts as finishing it, the status just goes from in-game to nothing
 export const isInMatchStatus = (status? : OnlineStatus) => status?.appId == DEADLOCK_APP_ID && isMatchDisplay(status.display);
 
+// param0 is minutes since the match started, not set during hero select
+const matchMinutes = (status? : OnlineStatus) => {
+    const n = Number(status?.rich?.param0);
+    return status?.rich?.param0 != undefined && Number.isFinite(n) ? n : undefined;
+};
+
 
 interface SteamState {
     login: Login;
@@ -60,8 +66,10 @@ interface SteamState {
     relationsLoaded: boolean;
     // Friends that are online, and what they're playing
     online: Map<number, OnlineStatus>;
-    // Accounts currently in a Deadlock round, they leave when it ends or they close the game
-    inMatch: Set<number>;
+    // Accounts currently in a Deadlock round → minutes into it (last known, -1 before it's shown). They leave when it ends or they close the game
+    inMatch: Map<number, number>;
+    // Bumped every time someone's round ends, including going straight into another one, the tracker checks their history on it
+    finished: Map<number, number>;
     personas: Map<number, Persona>;
     // App id → name for whatever friends are playing
     games: Map<number, string>;
@@ -75,7 +83,8 @@ export const SteamStore = createStore({
         relations: new Map(),
         relationsLoaded: false,
         online: new Map(),
-        inMatch: new Set(),
+        inMatch: new Map(),
+        finished: new Map(),
         personas: new Map(),
         games: new Map()
     } as SteamState,
@@ -100,8 +109,16 @@ export const SteamStore = createStore({
                 s.online.set(id, status);
             }
 
-            if(isInMatchStatus(status)) s.inMatch.add(id);
-            else s.inMatch.delete(id);
+            // The minutes going backwards means a new match started without them ever leaving one, e.g. 24 → 1
+            const last = s.inMatch.get(id);
+            const minutes = matchMinutes(status);
+            const nowIn = isInMatchStatus(status);
+            const restarted = nowIn && last != undefined && minutes != undefined && minutes < last;
+            if(last != undefined && (!nowIn || restarted)) s.finished.set(id, (s.finished.get(id) ?? 0) + 1);
+
+            if(!nowIn) s.inMatch.delete(id);
+            else if(restarted || last == undefined) s.inMatch.set(id, minutes ?? -1);
+            else if(minutes != undefined && minutes != last) s.inMatch.set(id, minutes);
         },
         setGame: (s, appId : number, name : string) => { s.games.set(appId, name) },
         // Persona updates come in constantly, only actual changes make it into the state
@@ -118,7 +135,6 @@ export const {
 
 export const isFriend = SteamStore.selector((s, id : number) => s.relations.get(id) == Relationship.Friend);
 
-export const isInMatch = SteamStore.selector((s, id : number) => s.inMatch.has(id));
 
 // What they're playing that isn't Deadlock, if the name's known yet
 export const gameName = SteamStore.selector((s, status : OnlineStatus) =>

@@ -10,7 +10,7 @@ import { toSteam64 } from "../helpers/steam.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, isMatchDisplay, type OnlineStatus, sameRich, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, type OnlineStatus, sameRich, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -151,16 +151,17 @@ const formatRich = (rich? : Readonly<Record<string, string>>) => !rich ? "none" 
     .join(" ");
 
 function updateStatus(id : number, status? : OnlineStatus) {
-    const before = SteamStore.get().online.get(id);
-    const was = before?.display;
-    const display = status?.display;
+    const before = SteamStore.get();
 
     // Everything Deadlock sets, for working out heroes, modes and parties from it later
-    if(!sameRich(before?.rich, status?.rich)) log(`${id} rich presence ${formatRich(status?.rich)}`);
-    if(isMatchDisplay(display) && !isMatchDisplay(was)) log(`${id} started a match`);
-    if(isMatchDisplay(was) && !isMatchDisplay(display)) log(`${id} finished a match`);
+    if(!sameRich(before.online.get(id)?.rich, status?.rich)) log(`${id} rich presence ${formatRich(status?.rich)}`);
 
     setOnline(id, status);
+
+    const after = SteamStore.get();
+    const finished = after.finished.get(id) != before.finished.get(id);
+    if(finished) log(`${id} finished a match`);
+    if(after.inMatch.has(id) && (finished || !before.inMatch.has(id))) log(`${id} started a match`);
 }
 
 // Steam doesn't reliably push friends' rich presence, so ask for it while they're in Deadlock

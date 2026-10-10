@@ -20,11 +20,9 @@ export const TrackerStore = createStore({
         // Doesn't replace a check that's already waiting
         queue: (s, id : number, at : number) => { if(!s.checks.has(id)) s.checks.set(id, { at }) },
         followUp: (s, id : number, attempt : number, at : number) => { s.checks.set(id, { at, attempt }) },
-        // Back in a game, they're not done yet
-        cancelFollowUp: (s, id : number) => { if(s.checks.get(id)?.attempt != null) s.checks.delete(id) },
         finish: (s, id : number) => { s.checks.delete(id) },
         recorded: (s) => { s.recorded++ }
     }
 });
 
-export const { queue, followUp, cancelFollowUp, finish, recorded } = TrackerStore.actions;
+export const { queue, followUp, finish, recorded } = TrackerStore.actions;
