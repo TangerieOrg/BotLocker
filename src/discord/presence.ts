@@ -1,25 +1,56 @@
 import { ActivityType } from "discord.js";
 import { PRESENCE_ROTATE_MS as ROTATE_MS } from "../config.ts";
 import { getLastMatch, getLatestMatch, getMatchRows, getStreak } from "../db/mod.ts";
-import { heroName, rankName } from "../deadlock/assets.ts";
+import { heroFromCodename, heroName, rankName } from "../deadlock/assets.ts";
 import { watchAll } from "../helpers/store.ts";
 import { getUser, LinkStore } from "../links/LinkStore.ts";
-import { getGroupPresenceLine, getIdleLine, getOnlinePresenceLine, getPresenceLine, matchContext } from "../lines/mod.ts";
-import { DEADLOCK_APP_ID, gameName, type OnlineStatus, SteamStore } from "../steam/SteamStore.ts";
+import {
+    getGroupPresenceLine, getIdleLine, getMatchPresenceLine, getOnlinePresenceLine, getPresenceLine, getQueuePresenceLine, matchContext
+} from "../lines/mod.ts";
+import { groupByParty, modeLabel, onlinePlayers, type Player, type Tier, TIERS } from "../steam/activity.ts";
+import { SteamStore } from "../steam/SteamStore.ts";
 import { client } from "./client.ts";
 import { DiscordStore, memberName, setStatus } from "./DiscordStore.ts";
 
-async function onlineLine(userId : string, accountId : number, status : OnlineStatus) {
+// The highest tier anyone is in, split into what the status rotates through. Parties go together in a match or queue
+function topTier(players : Player[]) {
+    for(const tier of TIERS) {
+        const inTier = players.filter(x => x.activity.kind == tier);
+        if(inTier.length == 0) continue;
+        const grouped = tier == "match" || tier == "queue";
+        const entries = grouped ? groupByParty(inTier, x => "party" in x.activity ? x.activity.party : undefined) : inTier.map(x => [x]);
+        return { tier, entries };
+    }
+    return undefined;
+}
+
+async function entryLine(tier : Tier, entry : Player[]) {
+    const names = await Promise.all(entry.map(x => memberName(x.userId)));
+
+    if(tier == "match") {
+        const matches = entry.map(x => x.activity).filter(x => x.kind == "match");
+        return getMatchPresenceLine({
+            names,
+            heroes: await Promise.all(matches.map(x => heroFromCodename(x.hero))),
+            mode: modeLabel(matches[0]?.mode),
+            minutes: Math.max(0, ...matches.map(x => x.minutes ?? 0)) || undefined
+        });
+    }
+
+    const [{ accountId, activity }] = entry;
     const last = await getLastMatch(accountId);
-    const inDeadlock = status.appId == DEADLOCK_APP_ID;
+    const hero = last ? await heroName(last.hero_id) : undefined;
+    const streak = await getStreak(accountId);
+
+    if(tier == "queue") return getQueuePresenceLine({ names, hero, streak });
 
     return getOnlinePresenceLine({
-        name: await memberName(userId),
-        hero: last ? await heroName(last.hero_id) : undefined,
-        game: inDeadlock ? undefined : gameName(status),
-        inDeadlock,
+        name: names[0],
+        hero,
+        game: activity.kind == "game" ? activity.game : undefined,
+        inDeadlock: activity.kind == "deadlock",
         won: !!last?.won,
-        streak: await getStreak(accountId)
+        streak
     });
 }
 
@@ -40,25 +71,25 @@ async function latestMatchLine(accountIds : number[]) {
     return getPresenceLine(await memberName(getUser(latest.account_id)!), matchContext(latest, await heroName(latest.hero_id), rank), !!latest.won);
 }
 
-async function nextStatus(rotation : number) {
-    const links = [...LinkStore.get().links];
-    const { online } = SteamStore.get();
-
-    // Only rotate through people in Deadlock if there are any, otherwise anyone else online on Steam
-    const inDeadlock = links.filter(([, id]) => online.get(id)?.appId == DEADLOCK_APP_ID);
-    const pool = inDeadlock.length > 0 ? inDeadlock : links.filter(([, id]) => online.has(id));
-
-    if(pool.length > 0) {
-        const [userId, accountId] = pool[rotation % pool.length];
-        return "Watching " + await onlineLine(userId, accountId, online.get(accountId)!);
-    }
+// In a match > queueing > in Deadlock > another game > online, and only once everyone's offline the last game or an idle line
+export async function nextStatus(rotation : number) {
+    const top = topTier(onlinePlayers());
+    if(top) return "Watching " + await entryLine(top.tier, top.entries[rotation % top.entries.length]);
 
     if(rotation % 2 == 0) {
-        const roast = await latestMatchLine(links.map(([, id]) => id));
+        const roast = await latestMatchLine([...LinkStore.get().links.values()]);
         if(roast) return "Watching " + roast;
     }
 
     return "Watching " + getIdleLine();
+}
+
+// Changes when someone starts a match or queue (or a party does), not every time the minutes tick over
+function topTierKey() {
+    const top = topTier(onlinePlayers());
+    if(!top) return "offline";
+    if(top.tier != "match" && top.tier != "queue") return top.tier;
+    return `${top.tier}:${top.entries.map(x => x.map(p => p.accountId).join("+")).join(",")}`;
 }
 
 export function startPresence() {
@@ -83,6 +114,8 @@ export function startPresence() {
 
     const run = () => { tick().catch(err => console.error(err)) };
     DiscordStore.subscribe(s => s.channel, run);
+    // Someone starting a match or queue gets shown straight away instead of waiting for the next rotation
+    watchAll([SteamStore, LinkStore], topTierKey, (_cur, prev) => { if(prev != undefined) run() });
     setInterval(run, ROTATE_MS);
     console.log(`[Presence] Rotating every ${ROTATE_MS / 1000}s`);
 }

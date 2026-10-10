@@ -20,6 +20,8 @@ export interface MatchHistoryEntry {
 
 export interface Hero {
     id: number;
+    // Internal codename (hero_chessmaster), rich presence uses it rather than the name
+    class_name: string;
     name: string;
     images: Record<"icon_image_small" | "icon_hero_card", string>;
 }

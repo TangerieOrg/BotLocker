@@ -23,7 +23,8 @@ async function cached<T>(path : string) : Promise<T[]> {
     }
 }
 
-const heroes = () => cached<Hero>("/heroes?only_active=true");
+// Every hero, not just active ones, so new heroes have names the day they come out (unreleased ones are already in there)
+const heroes = () => cached<Hero>("/heroes");
 const ranks = () => cached<Rank>("/ranks");
 
 const hero = async (id : number) => (await heroes()).find(x => x.id == id);
@@ -31,6 +32,23 @@ const hero = async (id : number) => (await heroes()).find(x => x.id == id);
 export const heroName = async (id : number) => (await hero(id))?.name ?? `Hero ${id}`;
 
 export const heroIcon = async (id : number) => (await hero(id))?.images.icon_image_small;
+
+const unknownCodenames = new Set<string>();
+
+// Rich presence's #Steam_RP_hero_chessmaster → Solomon. Anything deadlock-api doesn't know yet gets its codename tidied up
+export async function heroFromCodename(token? : string) {
+    if(!token) return undefined;
+    const code = token.replace(/^#?steam_rp_/i, "").toLowerCase();
+    const found = (await heroes()).find(x => x.class_name?.toLowerCase() == code);
+    if(found) return found.name;
+
+    if(!unknownCodenames.has(code)) {
+        unknownCodenames.add(code);
+        console.log(`[Assets] No hero for codename ${token}`);
+    }
+    const bare = code.replace(/^hero_/, "");
+    return bare.charAt(0).toUpperCase() + bare.slice(1);
+}
 
 export async function rankName(badge : number | null | undefined) {
     if(!badge) return "Unranked";
