@@ -10,7 +10,7 @@ import { toSteam64 } from "../helpers/steam.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, isMatchDisplay, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, isMatchDisplay, type OnlineStatus, sameRich, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -135,20 +135,28 @@ client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
 
     // Pushed rich presence is often empty even mid-game, so that keeps whatever the poll last saw
     const last = SteamStore.get().online.get(id);
-    const pushed = update.rich_presence?.find(x => x.key == "steam_display")?.value;
-    const display = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.display : undefined);
+    const pushed = update.rich_presence?.length ? Object.fromEntries(update.rich_presence.map(x => [x.key, String(x.value)])) : undefined;
+    const rich = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.rich : undefined);
 
-    updateStatus(id, online ? { appId, game: field("game_name") || undefined, display } : undefined);
+    updateStatus(id, online ? { appId, game: field("game_name") || undefined, display: rich?.steam_display, rich } : undefined);
 
     const name = field("player_name");
     if(name) setPersona(id, { name, avatar: field("avatar_url_full") });
 });
 
+// steam_display first, the rest alphabetical
+const formatRich = (rich? : Readonly<Record<string, string>>) => !rich ? "none" : Object.entries(rich)
+    .sort(([a], [b]) => a == "steam_display" ? -1 : b == "steam_display" ? 1 : a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(" ");
+
 function updateStatus(id : number, status? : OnlineStatus) {
-    const was = SteamStore.get().online.get(id)?.display;
+    const before = SteamStore.get().online.get(id);
+    const was = before?.display;
     const display = status?.display;
 
-    if(display != was) log(`${id} rich presence ${was ?? "none"} → ${display ?? "none"}`);
+    // Everything Deadlock sets, for working out heroes, modes and parties from it later
+    if(!sameRich(before?.rich, status?.rich)) log(`${id} rich presence ${formatRich(status?.rich)}`);
     if(isMatchDisplay(display) && !isMatchDisplay(was)) log(`${id} started a match`);
     if(isMatchDisplay(was) && !isMatchDisplay(display)) log(`${id} finished a match`);
 
@@ -166,9 +174,12 @@ async function pollRichPresence() {
         // Could have closed the game while this was in flight
         const status = SteamStore.get().online.get(id);
         if(status?.appId != DEADLOCK_APP_ID) continue;
-        // Nothing back for them isn't the same as no rich presence, keep what's known rather than flip them into a match
-        const display = res.users[toSteam64(id)]?.richPresence?.steam_display;
-        if(display) updateStatus(id, { ...status, display });
+        // Nothing back for them isn't the same as no rich presence, keep what's known rather than flip them out of a match
+        const polled = res.users[toSteam64(id)]?.richPresence as unknown as Record<string, unknown> | undefined;
+        if(!polled?.steam_display) continue;
+
+        const rich = Object.fromEntries(Object.entries(polled).map(([k, v]) => [k, String(v)]));
+        updateStatus(id, { ...status, display: rich.steam_display, rich });
     }
 }
 

@@ -33,7 +33,14 @@ export interface OnlineStatus {
     game?: string;
     // Rich presence steam_display token, Deadlock uses it to say what they're doing
     display?: string;
+    // Every rich presence key they have set (hero, mode, party etc), display is just steam_display from this
+    rich?: Readonly<Record<string, string>>;
 }
+
+export const sameRich = (a? : Readonly<Record<string, string>>, b? : Readonly<Record<string, string>>) => {
+    const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+    return [...keys].every(k => a?.[k] === b?.[k]);
+};
 
 // Closing the game mid-round still counts as finishing it, the status just goes from in-game to nothing
 export const isInMatchStatus = (status? : OnlineStatus) => status?.appId == DEADLOCK_APP_ID && isMatchDisplay(status.display);
@@ -89,7 +96,9 @@ export const SteamStore = createStore({
         setOnline: (s, id : number, status? : OnlineStatus) => {
             const known = s.online.get(id);
             if(!status) s.online.delete(id);
-            else if(known?.appId != status.appId || known?.game != status.game || known?.display != status.display) s.online.set(id, status);
+            else if(known?.appId != status.appId || known?.game != status.game || known?.display != status.display || !sameRich(known?.rich, status.rich)) {
+                s.online.set(id, status);
+            }
 
             if(isInMatchStatus(status)) s.inMatch.add(id);
             else s.inMatch.delete(id);
