@@ -95,3 +95,13 @@ export const getMatchRows = asDbFunction((db, matchId : number) => {
     using stmt = db.prepare<Match>("SELECT * FROM matches WHERE match_id = ?");
     return stmt.all(matchId);
 });
+
+// One player's games in a mode since the given time, newest first
+export const getPlayerMatches = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean) => {
+    using stmt = db.prepare<Match>(`--sql
+        SELECT * FROM matches
+        WHERE account_id = ? AND start_time >= ? AND (game_mode = 4) = ?
+        ORDER BY match_id DESC
+    `);
+    return stmt.all(accountId, since, Number(streetBrawl));
+});
