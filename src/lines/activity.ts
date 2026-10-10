@@ -22,10 +22,15 @@ const IN_MATCH_LINES = [
     "{name} sweat through {mode}",
     "{name} in a {mode} game they'll blame on the team",
     "{name} survive {minutes} minutes of {mode}. Somehow",
-    "{name} {minutes} minutes in as {hero} and already tilted",
+    "{name} {minutes} minutes in as {hero} and already tilted"
+];
+
+// Hero select and loading in, no hero or minutes yet
+const HERO_SELECT_LINES = [
     "{name} pick a hero to throw with",
     "{name} load into another one",
-    "{name} in a match. Wish their team luck"
+    "{name} in hero select. Wish their team luck",
+    "{name} agonise over which hero to lose with"
 ];
 
 const IN_MATCH_GROUP_LINES = [
@@ -132,8 +137,10 @@ const keep = (ctx : { hero?: string, heroes?: (string | undefined)[], mode?: str
 export function getMatchPresenceLine(ctx : MatchActivity) {
     if(ctx.names.length > 1) return fillActivity(pickFrom(IN_MATCH_GROUP_LINES, keep(ctx)), ctx);
 
+    if(!ctx.heroes[0]) return fillActivity(fresh(HERO_SELECT_LINES), ctx);
+
     // Same chance as the results lines of going for something about their hero
-    const hero = ctx.heroes[0] ? HERO_LINES[ctx.heroes[0]] : undefined;
+    const hero = HERO_LINES[ctx.heroes[0]];
     if(hero && Math.random() < 0.35) return fillActivity(fresh(hero.presence), ctx);
     return fillActivity(pickFrom(IN_MATCH_LINES, keep(ctx)), ctx);
 }
