@@ -30,7 +30,7 @@ async function runCheck(id : number, check : Check) {
     const next = check.attempt == null || found ? undefined : check.attempt + 1;
     if(next != null && next < CHECK_DELAYS_MS.length) return followUp(id, next, Date.now() + CHECK_DELAYS_MS[next]);
 
-    if(check.attempt != null && !found) log(`${id} finished a match but no new match showed up`);
+    if(check.attempt != null && !found) log(`Nothing new for ${id} after ${CHECK_DELAYS_MS.length} checks`);
     finish(id);
 }
 
@@ -70,9 +70,10 @@ function startRunner() {
 }
 
 export function startTracker() {
-    // Just linked or just friended, backfill or catch up straight away
+    // Just linked, just friended or the bot just started, backfill or catch up straight away.
+    // Retried like a finished round since a match that ended while the bot was restarting can take a few minutes to reach their history
     watchAll([SteamStore, LinkStore], trackedAccounts, (cur, prev) => {
-        for(const id of diffSet(cur, prev).added) queue(id, Date.now());
+        for(const id of diffSet(cur, prev).added) followUp(id, 0, Date.now());
     }, setEquals);
 
     // Someone's round just ended (or they closed the game), check a few times until the match shows up.
