@@ -10,7 +10,7 @@ import { toSteam64 } from "../helpers/steam.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, IN_MATCH_DISPLAY, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, IN_MATCH_DISPLAY, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -18,6 +18,7 @@ const HELLO_INTERVAL_MS = 5000;
 const JOB_TIMEOUT_MS = 15000;
 const TOKEN_KEY = "steam_refresh_token";
 const RELOGIN_MS = 5 * 60 * 1000;
+const RICH_PRESENCE_POLL_MS = 30 * 1000;
 
 const { log, error } = logger("Steam");
 
@@ -131,17 +132,45 @@ client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
     const gameId = Number(field("gameid") ?? 0);
     const appId = field("game_played_app_id") || (gameId < 2 ** 32 ? gameId : 0);
     const online = state != null && state != 0;
-    const display = appId == DEADLOCK_APP_ID ? field("rich_presence")?.find(x => x.key == "steam_display")?.value : undefined;
 
-    const was = SteamStore.get().online.get(id)?.display;
-    if(online && display == IN_MATCH_DISPLAY && was != IN_MATCH_DISPLAY) log(`${id} started a match`);
-    if(was == IN_MATCH_DISPLAY && display != IN_MATCH_DISPLAY) log(`${id} finished a match`);
+    // Pushed rich presence is often empty even mid-game, so that keeps whatever the poll last saw
+    const last = SteamStore.get().online.get(id);
+    const pushed = update.rich_presence?.find(x => x.key == "steam_display")?.value;
+    const display = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.display : undefined);
 
-    setOnline(id, online ? { appId, game: field("game_name") || undefined, display } : undefined);
+    updateStatus(id, online ? { appId, game: field("game_name") || undefined, display } : undefined);
 
     const name = field("player_name");
     if(name) setPersona(id, { name, avatar: field("avatar_url_full") });
 });
+
+function updateStatus(id : number, status? : OnlineStatus) {
+    const was = SteamStore.get().online.get(id)?.display;
+    const display = status?.display;
+
+    if(display != was) log(`${id} rich presence ${was ?? "none"} → ${display ?? "none"}`);
+    if(display == IN_MATCH_DISPLAY && was != IN_MATCH_DISPLAY) log(`${id} started a match`);
+    if(was == IN_MATCH_DISPLAY && display != IN_MATCH_DISPLAY) log(`${id} finished a match`);
+
+    setOnline(id, status);
+}
+
+// Steam doesn't reliably push friends' rich presence, so ask for it while they're in Deadlock
+async function pollRichPresence() {
+    const { login, online } = SteamStore.get();
+    const ids = [...online].filter(([, x]) => x.appId == DEADLOCK_APP_ID).map(([id]) => id);
+    if(login.state != "loggedOn" || ids.length == 0) return;
+
+    const res = await client.requestRichPresence(DEADLOCK_APP_ID, ids.map(toSteam64), "english");
+    for(const id of ids) {
+        // Could have closed the game while this was in flight
+        const status = SteamStore.get().online.get(id);
+        if(status?.appId != DEADLOCK_APP_ID) continue;
+        // Nothing back for them isn't the same as no rich presence, keep what's known rather than flip them into a match
+        const display = res.users[toSteam64(id)]?.richPresence?.steam_display;
+        if(display) updateStatus(id, { ...status, display });
+    }
+}
 
 // Session dropped or a job went unanswered, the hello loop starts over
 export function gcJob(type : number, payload : Uint8Array) : Promise<Uint8Array> {
@@ -228,6 +257,7 @@ export function startSteam() {
     });
 
     watchGames();
+    setInterval(() => pollRichPresence().catch(err => error("Couldn't get rich presence", err)), RICH_PRESENCE_POLL_MS);
 
     logOn();
 }
