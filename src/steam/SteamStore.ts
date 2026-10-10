@@ -140,4 +140,7 @@ export const isFriend = SteamStore.selector((s, id : number) => s.relations.get(
 export const gameName = SteamStore.selector((s, status : OnlineStatus) =>
     status.game ?? (status.appId && status.appId != DEADLOCK_APP_ID ? s.games.get(status.appId) : undefined));
 
+// Steam's party id, shared by everyone queued together. Still set in the menus after a round
+export const partyOf = SteamStore.selector((s, id : number) => s.online.get(id)?.rich?.steam_player_group);
+
 export const botProfileUrl = SteamStore.selector(s => s.self ? `https://steamcommunity.com/profiles/${toSteam64(s.self)}` : undefined);
