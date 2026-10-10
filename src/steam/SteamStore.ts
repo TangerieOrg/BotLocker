@@ -5,8 +5,11 @@ import { toSteam64 } from "../helpers/steam.ts";
 
 export const Relationship = SteamUser.EFriendRelationship;
 export const DEADLOCK_APP_ID = 1422450;
-// Deadlock's steam_display while they're in a round, the others are #MainMenu, #PickingHeroes and #FindingMatch
-export const IN_MATCH_DISPLAY = "#playingas";
+// Deadlock's steam_display tokens while they're in a round start with this (#Steam_Citadel_InGame_Hero),
+// anything else is outside a match (#Steam_Citadel_Hideout_Chess etc)
+const IN_MATCH_PREFIX = "#steam_citadel_ingame";
+
+export const isMatchDisplay = (display? : string) => !!display?.toLowerCase().startsWith(IN_MATCH_PREFIX);
 
 // guard is set when the login is waiting on a Steam Guard code from /steamguard, a new object every time it asks
 export type Login =
@@ -34,7 +37,7 @@ export interface OnlineStatus {
 
 // No rich presence counts as in a match, so closing the game still gets picked up for anyone it never arrives for
 export const isInMatchStatus = (status? : OnlineStatus) =>
-    status?.appId == DEADLOCK_APP_ID && (status.display == undefined || status.display == IN_MATCH_DISPLAY);
+    status?.appId == DEADLOCK_APP_ID && (status.display == undefined || isMatchDisplay(status.display));
 
 
 interface SteamState {

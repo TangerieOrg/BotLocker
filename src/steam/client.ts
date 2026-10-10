@@ -10,7 +10,7 @@ import { toSteam64 } from "../helpers/steam.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, IN_MATCH_DISPLAY, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, isMatchDisplay, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -149,8 +149,8 @@ function updateStatus(id : number, status? : OnlineStatus) {
     const display = status?.display;
 
     if(display != was) log(`${id} rich presence ${was ?? "none"} → ${display ?? "none"}`);
-    if(display == IN_MATCH_DISPLAY && was != IN_MATCH_DISPLAY) log(`${id} started a match`);
-    if(was == IN_MATCH_DISPLAY && display != IN_MATCH_DISPLAY) log(`${id} finished a match`);
+    if(isMatchDisplay(display) && !isMatchDisplay(was)) log(`${id} started a match`);
+    if(isMatchDisplay(was) && !isMatchDisplay(display)) log(`${id} finished a match`);
 
     setOnline(id, status);
 }
