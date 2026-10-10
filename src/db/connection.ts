@@ -38,28 +38,11 @@ export function transaction<R>(db : Database, func : () => R) : R {
     }
 }
 
-const SCHEMA_VERSION = 2;
-
 await withDb(db => {
     db.exec(`--sql
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = normal;
-    `);
 
-    // Match data from before the Steam bot only rewrite isn't kept, links and the Steam login token are
-    using stmt = db.prepare("PRAGMA user_version");
-    const [version] = stmt.value<[number]>()!;
-    if(version < SCHEMA_VERSION) {
-        db.exec(`--sql
-            DROP TABLE IF EXISTS matches;
-            DROP TABLE IF EXISTS match_details;
-            DROP TABLE IF EXISTS match_salts;
-            DROP TABLE IF EXISTS guilds;
-        `);
-        db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    }
-
-    db.exec(`--sql
         CREATE TABLE IF NOT EXISTS links (
             user_id TEXT PRIMARY KEY,
             account_id INTEGER NOT NULL UNIQUE,
