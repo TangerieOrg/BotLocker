@@ -13,26 +13,18 @@ const getNumber = (name : string) => {
 }
 
 export const TOKEN = Deno.env.get("DISCORD_TOKEN");
-export const DEV_GUILD_ID = Deno.env.get("DEV_GUILD_ID");
+// The one channel wins and losses get announced in, commands are registered to its server
+export const CHANNEL_ID = Deno.env.get("CHANNEL_ID");
 export const OWNER_ID = Deno.env.get("OWNER_ID");
 export const SEND_DISCORD_MESSAGE = getBool("SEND_DISCORD_MESSAGE") ?? true;
 
-export const PORT = getNumber("PORT") ?? 8000;
-
 export const DATA_DIR = Deno.env.get("DATA_DIR") ?? "./data";
-
-export const DEADLOCK_API_KEY = Deno.env.get("DEADLOCK_API_KEY");
-export const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY");
 
 // Dedicated Steam account (with Deadlock access) that pulls match data from the game coordinator
 export const STEAM_BOT_USERNAME = Deno.env.get("STEAM_BOT_USERNAME");
 export const STEAM_BOT_PASSWORD = Deno.env.get("STEAM_BOT_PASSWORD");
-// Skips Steam Guard on a new server, deno task steam-test prints one after logging in
-export const STEAM_BOT_REFRESH_TOKEN = Deno.env.get("STEAM_BOT_REFRESH_TOKEN");
-export const STEAM_BOT_GUARD_CODE = Deno.env.get("STEAM_BOT_GUARD_CODE");
 
-// deadlock-api is polled often since it's free, the Steam bot only rarely as a backstop (it's normally asked when a friend stops playing)
-export const POLL_INTERVAL_MS = getNumber("POLL_INTERVAL_MS") ?? 2 * 60 * 1000;
+// Matches are normally picked up as soon as a friend stops playing, this is just a backstop
 export const GC_POLL_INTERVAL_MS = getNumber("GC_POLL_INTERVAL_MS") ?? 60 * 60 * 1000;
 export const MAX_NOTIFY_AGE_S = (getNumber("MAX_NOTIFY_AGE_H") ?? 6) * 60 * 60;
 export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;

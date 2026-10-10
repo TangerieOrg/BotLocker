@@ -1,23 +1,5 @@
-import type { APIEmbed, ChatInputCommandInteraction, Client, Guild, GuildMember } from "discord.js";
-import { getLink, getNotifyGuilds, type Link } from "../db/mod.ts";
-import { errorEmbed } from "./embeds.ts";
+import type { ChatInputCommandInteraction, Client, Guild, GuildMember } from "discord.js";
 import { OWNER_ID } from "../config.ts";
-
-export async function getTargetLink(interaction : ChatInputCommandInteraction) : Promise<{ link?: Link, error?: APIEmbed }> {
-    const user = interaction.options.getUser("user");
-    if(user?.bot) return { error: errorEmbed("Invalid User", "They must not be a bot") };
-
-    const link = await getLink((user ?? interaction.user).id);
-    if(!link) {
-        return {
-            error: user ?
-                errorEmbed("No Deadlock account linked to user") :
-                errorEmbed("Deadlock Account Not Linked", "Run /link to link")
-        };
-    }
-
-    return { link };
-}
 
 export async function fetchMembers(guild : Guild, userIds : string[]) {
     const members = new Map<string, GuildMember>();
@@ -25,19 +7,6 @@ export async function fetchMembers(guild : Guild, userIds : string[]) {
         guild.members.fetch(id).then(x => members.set(id, x)).catch(() => undefined)
     ));
     return members;
-}
-
-// For places with no server of their own (bot status, logs). Prefers servers with a notify channel
-export async function memberName(client : Client, userId : string) {
-    const notify = new Set((await getNotifyGuilds()).map(x => x.guild_id));
-    const guilds = [...client.guilds.cache.values()].sort((a, b) => Number(notify.has(b.id)) - Number(notify.has(a.id)));
-
-    for(const guild of guilds) {
-        const member = await guild.members.fetch(userId).catch(() => undefined);
-        if(member) return member.displayName;
-    }
-
-    return await client.users.fetch(userId).then(x => x.displayName).catch(() => "someone");
 }
 
 // Bot application owner, or OWNER_ID if set

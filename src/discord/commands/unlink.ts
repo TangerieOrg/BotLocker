@@ -1,5 +1,5 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, SlashCommandBuilder } from "discord.js";
-import { removeLink } from "../../db/mod.ts";
+import { getAccount, unlink } from "../../links/LinkStore.ts";
 import { errorEmbed, successEmbed } from "../embeds.ts";
 
 export const data = new SlashCommandBuilder()
@@ -8,8 +8,10 @@ export const data = new SlashCommandBuilder()
     .setContexts(InteractionContextType.Guild);
 
 export async function execute(interaction : ChatInputCommandInteraction) {
-    if(!await removeLink(interaction.user.id)) {
+    if(getAccount(interaction.user.id) == null) {
         return await interaction.reply({ embeds: [errorEmbed("Deadlock Account Not Linked", "Run /link to link")], flags: MessageFlags.Ephemeral });
     }
+
+    unlink(interaction.user.id);
     await interaction.reply({ embeds: [successEmbed("Profile Unlinked Successfully")], flags: MessageFlags.Ephemeral });
 }

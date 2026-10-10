@@ -1,5 +1,6 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { resetPeriod } from "../../db/mod.ts";
+import { resetPeriod } from "../../board/BoardStore.ts";
+import { now } from "../../helpers/now.ts";
 import { errorEmbed, successEmbed } from "../embeds.ts";
 import { isOwner } from "../util.ts";
 
@@ -14,6 +15,6 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         return await interaction.reply({ embeds: [errorEmbed("Permissions Error", "Only the bot owner can reset the record")], flags: MessageFlags.Ephemeral });
     }
 
-    await resetPeriod(interaction.guildId!);
+    resetPeriod(now());
     await interaction.reply({ embeds: [successEmbed("Recording period reset")], flags: MessageFlags.Ephemeral });
 }
