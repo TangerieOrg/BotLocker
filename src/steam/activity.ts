@@ -56,9 +56,11 @@ export const onlinePlayers = () : Player[] => [...LinkStore.get().links]
     .map(([userId, accountId]) => ({ userId, accountId, activity: activityOf(accountId) }))
     .filter(x => x.activity) as Player[];
 
-// #Steam_Citadel_RP_StreetBrawl → Street Brawl, close enough for modes nobody's seen yet
+// #Steam_Citadel_RP_StreetBrawl → Street Brawl, #Steam_Citadel_RP_MM_Unranked → Unranked (MM is matchmaking).
+// Close enough for modes nobody's seen yet
 export const modeLabel = (token? : string) => !token ? undefined : token
     .replace(/^#?steam_citadel_rp_/i, "")
+    .replace(/^mm_/i, "")
     .replace(/_/g, " ")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/([a-zA-Z]{2,})(\d)/g, "$1 $2");
