@@ -70,6 +70,8 @@ interface SteamState {
     inMatch: Map<number, number>;
     // Bumped every time someone's round ends, including going straight into another one, the tracker checks their history on it
     finished: Map<number, number>;
+    // Last Steam party id seen for each account, kept after they close the game so their last round can still be grouped
+    parties: Map<number, string>;
     personas: Map<number, Persona>;
     // App id → name for whatever friends are playing
     games: Map<number, string>;
@@ -85,6 +87,7 @@ export const SteamStore = createStore({
         online: new Map(),
         inMatch: new Map(),
         finished: new Map(),
+        parties: new Map(),
         personas: new Map(),
         games: new Map()
     } as SteamState,
@@ -104,6 +107,9 @@ export const SteamStore = createStore({
         // undefined when they go offline
         setOnline: (s, id : number, status? : OnlineStatus) => {
             const known = s.online.get(id);
+            const party = status?.rich?.steam_player_group;
+            if(party && s.parties.get(id) != party) s.parties.set(id, party);
+
             if(!status) s.online.delete(id);
             else if(known?.appId != status.appId || known?.game != status.game || known?.display != status.display || !sameRich(known?.rich, status.rich)) {
                 s.online.set(id, status);
@@ -140,7 +146,7 @@ export const isFriend = SteamStore.selector((s, id : number) => s.relations.get(
 export const gameName = SteamStore.selector((s, status : OnlineStatus) =>
     status.game ?? (status.appId && status.appId != DEADLOCK_APP_ID ? s.games.get(status.appId) : undefined));
 
-// Steam's party id, shared by everyone queued together. Still set in the menus after a round
-export const partyOf = SteamStore.selector((s, id : number) => s.online.get(id)?.rich?.steam_player_group);
+// Steam's party id, shared by everyone queued together. Remembered after they leave the game
+export const partyOf = SteamStore.selector((s, id : number) => s.parties.get(id));
 
 export const botProfileUrl = SteamStore.selector(s => s.self ? `https://steamcommunity.com/profiles/${toSteam64(s.self)}` : undefined);
