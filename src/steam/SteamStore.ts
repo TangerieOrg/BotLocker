@@ -35,9 +35,8 @@ export interface OnlineStatus {
     display?: string;
 }
 
-// No rich presence counts as in a match, so closing the game still gets picked up for anyone it never arrives for
-export const isInMatchStatus = (status? : OnlineStatus) =>
-    status?.appId == DEADLOCK_APP_ID && (status.display == undefined || isMatchDisplay(status.display));
+// Closing the game mid-round still counts as finishing it, the status just goes from in-game to nothing
+export const isInMatchStatus = (status? : OnlineStatus) => status?.appId == DEADLOCK_APP_ID && isMatchDisplay(status.display);
 
 
 interface SteamState {
