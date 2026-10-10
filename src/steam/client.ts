@@ -10,7 +10,7 @@ import { toSteam64 } from "../helpers/steam.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, IN_MATCH_DISPLAY, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -131,9 +131,13 @@ client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
     const gameId = Number(field("gameid") ?? 0);
     const appId = field("game_played_app_id") || (gameId < 2 ** 32 ? gameId : 0);
     const online = state != null && state != 0;
+    const display = appId == DEADLOCK_APP_ID ? field("rich_presence")?.find(x => x.key == "steam_display")?.value : undefined;
 
-    if(online && appId == DEADLOCK_APP_ID && !SteamStore.get().playing.has(id)) log(`${id} started playing Deadlock`);
-    setOnline(id, online ? { appId, game: field("game_name") || undefined } : undefined);
+    const was = SteamStore.get().online.get(id)?.display;
+    if(online && display == IN_MATCH_DISPLAY && was != IN_MATCH_DISPLAY) log(`${id} started a match`);
+    if(was == IN_MATCH_DISPLAY && display != IN_MATCH_DISPLAY) log(`${id} finished a match`);
+
+    setOnline(id, online ? { appId, game: field("game_name") || undefined, display } : undefined);
 
     const name = field("player_name");
     if(name) setPersona(id, { name, avatar: field("avatar_url_full") });

@@ -6,4 +6,5 @@ export interface SteamPersona {
     game_played_app_id?: number | null;
     gameid?: string | number | null;
     game_name?: string | null;
+    rich_presence?: { key: string, value: string }[];
 }

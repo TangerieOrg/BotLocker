@@ -30,7 +30,7 @@ async function runCheck(id : number, check : Check) {
     const next = check.attempt == null || found ? undefined : check.attempt + 1;
     if(next != null && next < CHECK_DELAYS_MS.length) return followUp(id, next, Date.now() + CHECK_DELAYS_MS[next]);
 
-    if(check.attempt != null && !found) log(`${id} stopped playing but no new match showed up`);
+    if(check.attempt != null && !found) log(`${id} finished a match but no new match showed up`);
     finish(id);
 }
 
@@ -75,23 +75,23 @@ export function startTracker() {
         for(const id of diffSet(cur, prev).added) queue(id, Date.now());
     }, setEquals);
 
-    // Someone just closed Deadlock, check a few times until the match shows up
-    watch(SteamStore, s => s.playing, (cur, prev) => {
+    // Someone's round just ended (or they closed the game), check a few times until the match shows up. Starting another cancels it
+    watch(SteamStore, s => s.inMatch, (cur, prev) => {
         const { added, removed } = diffSet(cur, prev);
         for(const id of added) cancelFollowUp(id);
 
         const tracked = trackedAccounts();
         for(const id of removed.filter(x => tracked.has(x))) {
-            log(`${id} stopped playing Deadlock, checking for a new match`);
+            log(`${id} left a match, checking for it`);
             followUp(id, 0, Date.now() + CHECK_DELAYS_MS[0]);
         }
     });
 
-    // Rare backstop for anything the stopped playing check missed
+    // Rare backstop for anything the end of match check missed
     setInterval(() => {
         for(const id of trackedAccounts()) queue(id, Date.now());
     }, GC_POLL_INTERVAL_MS);
 
     startRunner();
-    log(`Checking friends when they stop playing, backstop every ${GC_POLL_INTERVAL_MS / 1000}s`);
+    log(`Checking friends when a match ends, backstop every ${GC_POLL_INTERVAL_MS / 1000}s`);
 }

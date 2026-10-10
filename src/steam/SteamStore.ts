@@ -5,6 +5,8 @@ import { toSteam64 } from "../helpers/steam.ts";
 
 export const Relationship = SteamUser.EFriendRelationship;
 export const DEADLOCK_APP_ID = 1422450;
+// Deadlock's steam_display while they're in a round, the others are #MainMenu, #PickingHeroes and #FindingMatch
+export const IN_MATCH_DISPLAY = "#playingas";
 
 // guard is set when the login is waiting on a Steam Guard code from /steamguard, a new object every time it asks
 export type Login =
@@ -26,7 +28,14 @@ export interface OnlineStatus {
     appId: number;
     // Only set for non-Steam games, Steam ones are looked up into games
     game?: string;
+    // Rich presence steam_display token, Deadlock uses it to say what they're doing
+    display?: string;
 }
+
+// No rich presence counts as in a match, so closing the game still gets picked up for anyone it never arrives for
+export const isInMatchStatus = (status? : OnlineStatus) =>
+    status?.appId == DEADLOCK_APP_ID && (status.display == undefined || status.display == IN_MATCH_DISPLAY);
+
 
 interface SteamState {
     login: Login;
@@ -38,10 +47,12 @@ interface SteamState {
     limited: boolean;
     // Everyone on the bot's friends list, including pending requests either way
     relations: Map<number, SteamUser.EFriendRelationship>;
+    // Steam has sent the friends list, relations means nothing before that
+    relationsLoaded: boolean;
     // Friends that are online, and what they're playing
     online: Map<number, OnlineStatus>;
-    // Accounts currently in Deadlock, they leave when they close it or go offline
-    playing: Set<number>;
+    // Accounts currently in a Deadlock round, they leave when it ends or they close the game
+    inMatch: Set<number>;
     personas: Map<number, Persona>;
     // App id → name for whatever friends are playing
     games: Map<number, string>;
@@ -53,8 +64,9 @@ export const SteamStore = createStore({
         gcReady: false,
         limited: false,
         relations: new Map(),
+        relationsLoaded: false,
         online: new Map(),
-        playing: new Set(),
+        inMatch: new Set(),
         personas: new Map(),
         games: new Map()
     } as SteamState,
@@ -63,7 +75,10 @@ export const SteamStore = createStore({
         setSelf: (s, id : number) => { s.self = id },
         setGcReady: (s, ready : boolean) => { s.gcReady = ready },
         setLimited: (s) => { s.limited = true },
-        setRelations: (s, relations : [number, SteamUser.EFriendRelationship][]) => { s.relations = new Map(relations) },
+        setRelations: (s, relations : [number, SteamUser.EFriendRelationship][]) => {
+            s.relations = new Map(relations);
+            s.relationsLoaded = true;
+        },
         setRelation: (s, id : number, rel : SteamUser.EFriendRelationship) => {
             if(rel == Relationship.None) s.relations.delete(id);
             else s.relations.set(id, rel);
@@ -72,10 +87,10 @@ export const SteamStore = createStore({
         setOnline: (s, id : number, status? : OnlineStatus) => {
             const known = s.online.get(id);
             if(!status) s.online.delete(id);
-            else if(known?.appId != status.appId || known?.game != status.game) s.online.set(id, status);
+            else if(known?.appId != status.appId || known?.game != status.game || known?.display != status.display) s.online.set(id, status);
 
-            if(status?.appId == DEADLOCK_APP_ID) s.playing.add(id);
-            else s.playing.delete(id);
+            if(isInMatchStatus(status)) s.inMatch.add(id);
+            else s.inMatch.delete(id);
         },
         setGame: (s, appId : number, name : string) => { s.games.set(appId, name) },
         // Persona updates come in constantly, only actual changes make it into the state
@@ -92,7 +107,7 @@ export const {
 
 export const isFriend = SteamStore.selector((s, id : number) => s.relations.get(id) == Relationship.Friend);
 
-export const isPlaying = SteamStore.selector((s, id : number) => s.playing.has(id));
+export const isInMatch = SteamStore.selector((s, id : number) => s.inMatch.has(id));
 
 // What they're playing that isn't Deadlock, if the name's known yet
 export const gameName = SteamStore.selector((s, status : OnlineStatus) =>
