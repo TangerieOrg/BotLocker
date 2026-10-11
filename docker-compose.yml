@@ -1,9 +1,11 @@
-version: '3'
+name: botlocker
+
 services:
   bot:
-    image: ${IMAGE_NAME}:latest
-    deploy:
-      replicas: 1
+    build: .
+    image: botlocker-bot:latest
+    pull_policy: never
+    restart: unless-stopped
     environment:
       - ENV_FILE=/run/secrets/BotLockerEnv
       - DATA_DIR=/data
@@ -14,7 +16,9 @@ services:
 
 volumes:
   botlocker-data:
+    external: true
+    name: botlocker_botlocker-data
 
 secrets:
   BotLockerEnv:
-    external: true
+    file: /home/tangerie/secrets/BotLockerEnv

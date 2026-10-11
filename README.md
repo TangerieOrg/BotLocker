@@ -8,13 +8,9 @@ Copy `.env.example` to `.env`, add your token, then `deno task dev`
 
 ## Deploy
 
-Pushing to `main` builds `docker.tangerie.xyz/botlocker` and deploys it as the `botlocker` swarm stack, served at `/deadlock`
+Pushing a `v*.*.*` tag builds the image on the server and runs it as the `botlocker` compose project
 
-Env vars come from the `BotLockerEnv` docker secret (same format as `.env`), create it on the swarm manager first
-
-```sh
-docker secret create BotLockerEnv .env
-```
+Env vars come from `/home/tangerie/secrets/BotLockerEnv` on the server (same format as `.env`)
 
 ## How it works
 

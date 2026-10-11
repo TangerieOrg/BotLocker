@@ -1,4 +1,4 @@
-name: Build, Push & Deploy
+name: Build & Deploy
 
 on:
   push:
@@ -7,20 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    uses: TangerieOrg/Workflows/.github/workflows/docker-build-push.yml@main
-    with:
-      image_name: botlocker
-      registry_name: docker.tangerie.xyz
-      ref: ${{ github.ref_name }}
-      force_build: true
-    secrets: inherit
-
   deploy:
-    uses: TangerieOrg/Workflows/.github/workflows/docker-deploy.yml@main
-    needs:
-      - build
+    uses: TangerieOrg/Workflows/.github/workflows/compose-deploy.yml@main
     with:
-      image_name: botlocker
-      registry_name: docker.tangerie.xyz
+      project: botlocker
+      ref: ${{ github.ref_name }}
     secrets: inherit
