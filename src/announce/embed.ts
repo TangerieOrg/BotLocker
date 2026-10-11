@@ -33,7 +33,7 @@ async function describe({ match, name } : Announced) {
         const winStreak = getWinStreakLine(ctx, streak);
         if(winStreak) text += `\n\n**${winStreak}**`;
     } else {
-        text = `This is for you: ${getInsult(ctx)}`;
+        text = `${getInsult(ctx)}`;
         const tilt = getTiltLine(ctx, -streak);
         if(tilt) text += `\n\n**${tilt}**`;
     }
