@@ -1,6 +1,6 @@
 import type { Hero, Rank } from "./types.ts";
 
-// Static names and icons only, match data all comes from the Steam bot
+// Static names and icons only, match data comes from the Steam bot (deadlock-api just tops up backfills)
 const ASSETS_URL = "https://api.deadlock-api.com/v1/assets";
 const TTL = 24 * 60 * 60 * 1000;
 
