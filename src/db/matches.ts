@@ -11,6 +11,11 @@ export const hasMatches = asDbFunction((db, accountId : number) => {
     return stmt.value(accountId) != null;
 });
 
+// All-zero stats mean the match ended before anything happened (e.g. a player left during pick),
+// not a real loss, so it shouldn't count against anyone
+const isEarlyEnded = (x : MatchHistoryEntry) =>
+    x.player_kills == 0 && x.player_deaths == 0 && x.player_assists == 0 && x.net_worth == 0 && x.last_hits == 0;
+
 // Returns how many weren't stored yet. Backfilled history goes in already announced
 export const insertMatches = asDbFunction((db, entries : MatchHistoryEntry[], announced : boolean) => {
     using insert = db.prepare(`--sql
@@ -23,6 +28,7 @@ export const insertMatches = asDbFunction((db, entries : MatchHistoryEntry[], an
 
     return transaction(db, () => entries
         .filter(x => TRACKED_MATCH_MODES.includes(x.match_mode))
+        .filter(x => !isEarlyEnded(x))
         .filter(x => insert.run(
             x.account_id, x.match_id, x.hero_id, x.start_time, x.match_duration_s, x.match_result == x.player_team ? 1 : 0,
             x.player_kills, x.player_deaths, x.player_assists, x.net_worth, x.last_hits,
