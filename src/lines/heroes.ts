@@ -17,8 +17,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Infernus is supposed to make the enemy team burn, not your team's patience."
         ],
         win: [
-            "Burned them down. Smells like a W.",
-            "Napalm, Flame Dash, win. Even you can follow that combo."
+            "Burned them down. An absolute inferno of a game.",
+            "Napalm, Flame Dash, perfect combo. Lovely."
         ],
         presence: [
             "{name} blow up next to nobody as Infernus",
@@ -35,8 +35,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Power Surge on, brain off."
         ],
         win: [
-            "Storm Cloud actually hit people for once. Weather's turning.",
-            "A Seven ult that landed. Somebody check the sky."
+            "Storm Cloud caught them all. Beautiful ult.",
+            "Static Charge, Lightning Balls, W. Electric game."
         ],
         presence: [
             "{name} Storm Cloud an empty room",
@@ -53,8 +53,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Sniping from max range and somehow still the first to die."
         ],
         win: [
-            "An Assassinate hit something. The clouds parted.",
-            "You flew around and it worked. Don't ask me how."
+            "Assassinate hit when it mattered. Deadly.",
+            "Owned the skies and the scoreboard. Great Vindicta."
         ],
         presence: [
             "{name} miss every Assassinate",
@@ -71,8 +71,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Malice stacks: zero. Self-inflicted damage: maximum."
         ],
         win: [
-            "Soul Exchange actually worked. Must be a full moon.",
-            "You drained them dry. Spooky. Nice."
+            "Soul Exchange played to perfection.",
+            "You drained them dry. Brilliant Lady Geist."
         ],
         presence: [
             "{name} Essence Bomb themself to death",
@@ -89,8 +89,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Infernal Resilience can't fix your decision-making."
         ],
         win: [
-            "Charged in, didn't die. Abrams diff.",
-            "Seismic Impact landed on actual enemies. Beautiful."
+            "Charged in and dominated. Abrams diff.",
+            "Seismic Impact on the whole team. Beautiful."
         ],
         presence: [
             "{name} Shoulder Charge into five enemies",
@@ -107,8 +107,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "You pulled a card from the deck and it said 'loss'."
         ],
         win: [
-            "Card Trick worked. Pick a card, any card. It's a W.",
-            "Lifted, slammed, deleted. Magic."
+            "Card Trick worked a treat. Pick a card, any card. It's a W.",
+            "Lifted, slammed, deleted. Pure magic."
         ],
         presence: [
             "{name} Project Mind into five enemies",
@@ -125,8 +125,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "McGinnis builds fortifications. You built excuses."
         ],
         win: [
-            "Turrets up, wall down, game won. Engineering.",
-            "Your turrets carried. Feel free to share the credit."
+            "Turrets up, wall down, game won. Masterful engineering.",
+            "Spectral Wall placed perfectly. Great McGinnis."
         ],
         presence: [
             "{name} drop turrets in an empty lane",
@@ -143,7 +143,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "You can bend time and you still couldn't find the right moment."
         ],
         win: [
-            "Swapped them into your team and they died. As designed.",
+            "Swapped them into your team and they melted. Galaxy brain.",
             "Time Wall, Carbine, win. Time well spent."
         ],
         presence: [
@@ -161,7 +161,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "You channelled Aurora in the open and got deleted mid-heal."
         ],
         win: [
-            "Singularity actually caught people. Science works.",
+            "Singularity caught the whole team. Game-winning ult.",
             "Big ult, big win. Dynamo diff."
         ],
         presence: [
@@ -179,8 +179,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Kelvin is a support and nobody on your team felt supported."
         ],
         win: [
-            "Ice Path somewhere useful for once. Cool.",
-            "Froze them solid. Icy W."
+            "Ice Path in all the right places. Great Kelvin.",
+            "Froze them solid. Ice cold performance."
         ],
         presence: [
             "{name} Ice Path into the enemy base",
@@ -197,8 +197,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Invisible all game and still found by everyone."
         ],
         win: [
-            "Bullet Dance actually worked. Let them dance.",
-            "Sneaky. Deadly. Unlikely, but deadly."
+            "Bullet Dance shredded them. Let them dance.",
+            "Sneaky and deadly. Exactly how Haze should be played."
         ],
         presence: [
             "{name} Bullet Dance into five people",
@@ -215,8 +215,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "The cowboy fantasy ends here, partner."
         ],
         win: [
-            "Lassoed, bounced, headshot. Someone's been watching westerns.",
-            "Rootin' tootin' W."
+            "Lassoed, bounced, headshot. Sharpest shooter in town.",
+            "Rootin' tootin' W, partner."
         ],
         presence: [
             "{name} bounce pad into the enemy team",
@@ -233,7 +233,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Grapple Arm missed so many times it filed a complaint."
         ],
         win: [
-            "A Bebop who hits hooks. Rare footage.",
+            "Hooks landing all game. Elite Bebop.",
             "Hook, uppercut, beam, W. Textbook."
         ],
         presence: [
@@ -252,7 +252,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Cat got their tongue. And their Patron.",
-            "Nine lives and you only needed a couple."
+            "Nine lives and you barely needed one. Superb."
         ],
         presence: [
             "{name} use up all nine lives",
@@ -269,8 +269,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "You were supposed to be the sniper, not the snipee."
         ],
         win: [
-            "The owl hit. Grey Talon fans rejoice.",
-            "Arrows landed, prey hunted. Nice."
+            "The owl hit and so did every arrow. Great Talon.",
+            "Arrows landed, prey hunted. Clinical."
         ],
         presence: [
             "{name} fly their owl into a wall",
@@ -288,7 +288,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Combo'd them into oblivion. Krill's proud of you.",
-            "Burrow, Combo, win. Both of you did great."
+            "Burrow, Combo, win. Both of you were brilliant."
         ],
         presence: [
             "{name} burrow into the enemy team",
@@ -305,8 +305,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Shiv plays dirty. You just played badly."
         ],
         win: [
-            "Shiv plays dirty and so did you. Nice.",
-            "The Killing Blows actually killed. Stabby W."
+            "Killing Blows landing left and right. Stabby W.",
+            "Shiv plays dirty and you played perfectly."
         ],
         presence: [
             "{name} Slice and Dice into a loss",
@@ -323,8 +323,8 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Your ally trusted you. Big mistake."
         ],
         win: [
-            "Air Dropped your ally on their heads. Delivery complete.",
-            "Power duo activated. You were the duo."
+            "Air Dropped your ally right on their heads. Perfect delivery.",
+            "Power duo activated. You made your ally look amazing."
         ],
         presence: [
             "{name} Air Drop a teammate into five enemies",
@@ -360,7 +360,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Power Slash connected. The blade is sharp today.",
-            "Shadow Transformation into a W. Honour restored."
+            "Shadow Transformation into a W. Honour achieved."
         ],
         presence: [
             "{name} miss a fully charged Power Slash",
@@ -378,7 +378,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Death Slam on five. Delicious.",
-            "You dove from the sky and actually landed on something useful."
+            "Dove from the sky and landed right where it hurt. Great Lash."
         ],
         presence: [
             "{name} Death Slam nobody",
@@ -395,7 +395,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "The Cube saved one teammate. The other five weren't so lucky."
         ],
         win: [
-            "Goo Ball through the backline. Disgusting. Brilliant.",
+            "Goo Ball through the backline. Brilliant.",
             "Cubed, punched, won. Gooey W."
         ],
         presence: [
@@ -414,7 +414,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "In and out of the suitcase, out with a W.",
-            "Barrage landed. Somebody packed for victory."
+            "Barrage landed perfectly. Somebody packed for victory."
         ],
         presence: [
             "{name} hide in a suitcase as Pocket",
@@ -432,7 +432,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "The djinn marked them and you finished them. Smooth.",
-            "A Mirage W. Real this time."
+            "Traveler into the perfect spot. Masterful Mirage."
         ],
         presence: [
             "{name} Traveler into a loss",
@@ -450,7 +450,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Slithered in, venom out, W. Snake behaviour.",
-            "Petrified them. Sssssuccess."
+            "Petrified them. Sssssuperb."
         ],
         presence: [
             "{name} slide into the enemy backline as Vyper",
@@ -504,7 +504,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Eternal Night. Lights out for the enemy team.",
-            "Stalked, marked, rended. Scary. Good."
+            "Stalked, marked, rended. Terrifyingly good."
         ],
         presence: [
             "{name} drift into a loss",
@@ -539,7 +539,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Reanimated, re-fed, re-lost."
         ],
         win: [
-            "It's alive! And so is your win rate.",
+            "It's alive! And it's winning.",
             "Pain Battery discharged into a W."
         ],
         presence: [
@@ -557,7 +557,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "You read the room wrong. All game."
         ],
         win: [
-            "Happy ending. The Patron died.",
+            "Happy ending. You wrote it.",
             "Rallying Charge, Bookwyrm, W. A real page-turner."
         ],
         presence: [
@@ -576,7 +576,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Checked them into the Baroness Hotel. Permanently.",
-            "Five-star service. The enemy team rated it one."
+            "Five-star service. Flawless."
         ],
         presence: [
             "{name} hold the door for the enemy team",
@@ -630,7 +630,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Riposte, advance, slash, W. Elegant.",
-            "Flawless? No. But a win."
+            "Perfect timing all game. A true duelist."
         ],
         presence: [
             "{name} Riposte nothing",
@@ -648,7 +648,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
         ],
         win: [
             "Naptime for the enemy team.",
-            "Pillow fight won. Somehow."
+            "Pillow fight champion. Well played."
         ],
         presence: [
             "{name} nap through another loss",
@@ -683,7 +683,7 @@ export const HERO_LINES : Record<string, HeroLines> = {
             "Star-crossed with losing."
         ],
         win: [
-            "Shining Wonder found its target. You're a star. Briefly.",
+            "Shining Wonder found its target. You're a star.",
             "Light Eater fed well tonight."
         ],
         presence: [

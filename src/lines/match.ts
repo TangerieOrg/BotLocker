@@ -160,76 +160,68 @@ const LOSS_LINES = [
 ];
 
 const WIN_LINES = [
-    "Won on {hero} with {kills} kills. Who are you and what have you done with the real one?",
-    "{kills}/{deaths}/{assists}. Fine. That was alright. Don't let it go to your head.",
-    "You won! Your teammates must have been incredible.",
-    "Patron down. Even a broken clock is right twice a day.",
-    "A win on {hero}? Screenshot it, it might not happen again.",
-    "{souls} souls and a win. Look at you being useful.",
-    "Congratulations on getting carried. Very well executed.",
-    "Not bad. The enemy team must have been playing with their feet.",
-    "You won. Don't get used to it.",
-    "Your Walker survived. That's growth.",
-    "Clean game on {hero}. Suspiciously clean.",
-    "Only {deaths} deaths? Who's been coaching you?",
-    "The enemy team is writing a Reddit post about you. A nice one, for once.",
-    "Big game. Please stop before you go back to normal.",
-    "{kills} kills. The enemy team should report you for griefing them.",
-    "A win! Quick, log off before the next one ruins it.",
-    "Rare W. Frame it.",
-    "You actually bought items this time. Proud of you.",
-    "Shrines down, Patron down, ego up.",
-    "Nice. The Mid Boss is yours. The respect is pending.",
-    "A {kda} KDA. Who did you pay?",
-    "{lasthits} last hits and a win. Farming simulator champion.",
-    "A win in {rank}. The badge might actually be earned this time.",
-    "{rank} player wins a game. More at eleven.",
-    "{name} won. I'm as surprised as you are.",
-    "{name} won on {hero}. I'll allow it.",
-    "Not a single excuse needed this time. Weird.",
-    "Look at you, contributing.",
-    "You were on the winning team. That technically counts.",
-    "Your teammates did great. You were there too.",
-    "Patron down, souls up, attitude unbearable.",
-    "Good game. Don't type it in chat, it'll go to your head.",
-    "{kills} kills. The enemy team is googling how to uninstall.",
-    "You won with {souls} souls. Money can buy happiness.",
-    "{souls} souls and you actually spent them on something. Growth.",
-    "You looked like you knew what you were doing. Unsettling.",
-    "The Urn got delivered. The game got delivered. Who are you?",
-    "{deaths} deaths and still won. The team must have been elite.",
-    "Somebody on the enemy team is blaming their jungler for that one.",
-    "That win had nothing to do with you. Probably.",
-    "A win! Don't worry, the next loss is already loading.",
-    "That's one for the scrapbook. A thin scrapbook.",
-    "Nice. Now do it again without the team.",
-    "You actually parried something. I saw it.",
-    "That was almost competent. Almost.",
-    "You dove the backline and lived. Write that down.",
-    "A win on {hero}. Fluke or trend? (Fluke.)",
-    "The Walkers fell like your standards usually do.",
-    "Good game. The enemy team will need therapy.",
-    "{kills}/{deaths}/{assists}. Fine. Screenshot it before it expires.",
-    "Winning looks weird on you.",
-    "You took the Mid Boss and didn't throw it. Character development.",
-    "Your team carried, you held the bags. Teamwork.",
-    "That's a W. Your record still isn't, but that's a W.",
-    "Nice win. The bar was on the floor and you stepped over it.",
-    "W. I'm not saying anything else, you'll get a big head.",
-    "Even a Bebop hits a hook sometimes.",
-    "You won. The Patron is gone. So is your humility.",
-    "One win closer to being average.",
-    "Valve should look into this. Something's off.",
-    "Only {deaths} of the deaths were yours. Respectable.",
-    "A {kda} KDA. Who's been sitting at your keyboard?",
-    "Brilliant. Now never queue again so this can be your legacy.",
-    "{lasthits} last hits. The troopers never stood a chance.",
-    "Won on {hero}. Somewhere a {hero} main just felt a disturbance.",
-    "You won. I had a roast ready and everything.",
-    "Didn't feed, didn't throw, didn't lose. Who are you?",
-    "{name} got a W. Mark the calendar.",
-    "Nice win. Only {losttime} of losses to make up for.",
-    "One win. {losses} losses. Keep going, you'll catch up eventually."
+    "Won on {hero} with {kills} kills. That's how it's done.",
+    "{kills}/{deaths}/{assists}. Proper game, well played.",
+    "A {kda} KDA and a win. Textbook.",
+    "Patron down. You earned every bit of that one.",
+    "Great game on {hero}. You made it look easy.",
+    "{souls} souls and you spent every one of them well.",
+    "Clean, confident, and a W. Lovely stuff.",
+    "You read that game perfectly.",
+    "That's a win, and you were a big part of it.",
+    "Your Walker held, your team held, you held. Well played.",
+    "Strong game on {hero}. The enemy team had no answers.",
+    "The enemy team will be thinking about you on the drive home.",
+    "Big game. Keep that energy for the next one.",
+    "{kills} kills on {hero}. You were a problem for them all game.",
+    "Shrines down, Patron down. Fantastic work.",
+    "You took the Mid Boss and turned it into a win. Smart play.",
+    "A {kda} KDA. You were everywhere you needed to be.",
+    "{lasthits} last hits. Farming like that wins games, and it just did.",
+    "A win in {rank}. You belong there.",
+    "{rank} and playing like you're above it. Great stuff.",
+    "{name} with the W. Well deserved.",
+    "{name} on {hero} was a nightmare to play against.",
+    "No excuses needed, just a well-earned win.",
+    "You showed up for your team today. GG.",
+    "Great rotations, great fights, great result.",
+    "Good game. You can type that one in chat with your chest out.",
+    "{kills} kills. The enemy team couldn't keep up.",
+    "You won with {souls} souls and a build that made total sense. Love to see it.",
+    "You played like you knew exactly what was coming.",
+    "The Urn got delivered and so did the win. Well played.",
+    "You made the plays that mattered. GG.",
+    "A win to be proud of.",
+    "That's how you close out a game.",
+    "Your parries were perfectly timed. Big outplays.",
+    "Your positioning was spot on all game.",
+    "You dove the backline and came out on top. Huge.",
+    "A win on {hero}. You're getting really good on this hero.",
+    "The Walkers fell and you were right there leading the push.",
+    "Good game. The enemy team never found a way through you.",
+    "{kills}/{deaths}/{assists}. Screenshot it, that's a good one.",
+    "Winning looks good on you.",
+    "Great decision-making from start to finish.",
+    "You and your team were on the same page all game. That's a W.",
+    "That's a W you can feel good about.",
+    "Calm under pressure. Nice one.",
+    "Your map awareness was sharp today.",
+    "A win and a solid stat line. What more could you want?",
+    "Every fight you took, you took for a reason. Well played.",
+    "A {kda} KDA. Absolutely cooking.",
+    "{lasthits} last hits. Nobody farmed like you did.",
+    "Won on {hero}. Every {hero} main would be proud of that game.",
+    "Didn't feed, didn't throw, didn't lose. Perfect.",
+    "{name} got the W. Very well played.",
+    "That was a carry performance.",
+    "You made your teammates' jobs easy. Great teammate.",
+    "Huge win. Go get a drink, you've earned it.",
+    "You played your role perfectly.",
+    "Brilliant game. That's the standard now.",
+    "You outplayed them. Simple as that.",
+    "Big plays, smart plays, winning plays.",
+    "One more W on the board. Keep stacking them.",
+    "{losses} losses in the books and you keep coming back to win games like this. Respect."
 ];
 
 // Games over before 20 minutes, someone got stomped
@@ -249,16 +241,16 @@ const STOMP_LOSS_LINES = [
 ];
 
 const STOMP_WIN_LINES = [
-    "Won in {minutes} minutes. The enemy team barely loaded in.",
-    "A {minutes}-minute win. Was the other team AFK or are you scary now?",
-    "Over in {minutes} minutes. Brutal. Keep that up and someone might call you good.",
-    "{minutes} minutes. That's not a win, that's a robbery.",
-    "Patron down before they'd finished their first item.",
-    "A {minutes}-minute stomp. Someone's having a good day. It won't last.",
-    "The fastest thing you've done all week.",
-    "{minutes} minutes. The enemy team will be thinking about that one for a while.",
-    "That ended so fast I almost missed you doing something useful.",
-    "{minutes} minutes and done. Leave some for the rest of us."
+    "Won in {minutes} minutes. Absolute domination.",
+    "A {minutes}-minute win. The enemy team never got a foothold.",
+    "Over in {minutes} minutes. That's what total control looks like.",
+    "{minutes} minutes. Clinical.",
+    "Patron down before they'd finished their first item. Ruthless.",
+    "A {minutes}-minute stomp. You were on another level today.",
+    "Fast, clean and decisive. Great game.",
+    "{minutes} minutes. You didn't give them a single opening.",
+    "You snowballed that perfectly from the first fight.",
+    "{minutes} minutes and done. Efficient and deadly."
 ];
 
 // Games over 45 minutes
@@ -278,16 +270,16 @@ const LONG_LOSS_LINES = [
 ];
 
 const LONG_WIN_LINES = [
-    "{minutes} minutes. You outlasted them, mostly through stubbornness.",
-    "A {minutes}-minute grind, and somehow it was worth it.",
-    "{minutes} minutes and you didn't throw it. Miracles happen.",
-    "That took {minutes} minutes. Your team deserves a medal. You deserve a nap.",
-    "Won after {minutes} minutes. They ran out of patience before you ran out of mistakes.",
-    "Late game hero, apparently. Who knew.",
-    "{minutes} minutes of suffering and it paid off. Don't make a habit of it.",
-    "Long game, long overdue win.",
-    "A {minutes}-minute win. Nobody thought you'd make it. Least of all me.",
-    "Full build, full send, finally a W."
+    "{minutes} minutes and you never gave up. That's a win built on grit.",
+    "A {minutes}-minute grind, and you came out on top. Brilliant.",
+    "{minutes} minutes of pressure and you held your nerve. Well played.",
+    "That took {minutes} minutes and your focus never dropped.",
+    "Won after {minutes} minutes. You outlasted and outplayed them.",
+    "Late game hero. You were clutch when it counted.",
+    "{minutes} minutes of hard work, and it paid off.",
+    "Long game, deserved win.",
+    "A {minutes}-minute win. Huge mental strength in that one.",
+    "Full build, full send, and a W. Great finish."
 ];
 
 // Street Brawl, there aren't any souls here
@@ -306,16 +298,16 @@ const BRAWL_LOSS_LINES = [
 ];
 
 const BRAWL_WIN_LINES = [
-    "You won Street Brawl. Real Deadlock is the other button.",
-    "Street Brawl W. Now try the real thing.",
-    "Won a brawl. Your mum would be proud. Concerned, but proud.",
-    "A Street Brawl win on {hero}. Big fish, small puddle.",
-    "{kills} kills in Street Brawl. Tough guy.",
-    "Brawl won. Nobody check the lobby's skill level.",
-    "Won the brawl. The street is yours. Nobody else wanted it.",
-    "Good brawl. Doesn't count, but good brawl.",
-    "You won the mode that doesn't matter. Congratulations, sincerely.",
-    "Street Brawl champion. Put it on your CV."
+    "Street Brawl W. You ran that street.",
+    "A Street Brawl win on {hero}. Clean fights all round.",
+    "Won the brawl. Your mechanics were on point.",
+    "{kills} kills in Street Brawl. Fast hands.",
+    "Brawl won. You were the best fighter out there.",
+    "The street is yours. Earned it.",
+    "Good brawl. Sharp aim, smart fights.",
+    "Street Brawl champion. Nicely done.",
+    "You brought the fight and won every one that mattered.",
+    "{kills}/{deaths}/{assists} in Street Brawl. Lovely numbers."
 ];
 
 const TILT_LINES : Array<[number, string[]]> = [
@@ -361,22 +353,22 @@ const TILT_LINES : Array<[number, string[]]> = [
 
 const WIN_STREAK_LINES : Array<[number, string[]]> = [
     [8, [
-        "{n} wins in a row. Valve is investigating.",
-        "{n} straight. Fine. You're good. Don't tell anyone I said that.",
-        "{n}-game win streak. The other lobbies are scared of you.",
-        "{n} in a row. Who are you and where's the usual feeder?"
+        "{n} wins in a row. You're unstoppable right now.",
+        "{n} straight. You're genuinely good at this game.",
+        "{n}-game win streak. The other lobbies should be worried.",
+        "{n} in a row. That's not luck, that's skill."
     ]],
     [5, [
-        "{n} in a row. Someone check if this account was sold.",
-        "{n} straight wins. The matchmaker is preparing something special for you.",
-        "{n}-game win streak. Statistically, the reckoning is near.",
-        "{n} wins back to back. I've got nothing to roast. I hate it."
+        "{n} in a row. You're in the zone.",
+        "{n} straight wins. Keep riding it.",
+        "{n}-game win streak. Seriously impressive.",
+        "{n} wins back to back. Everything's clicking."
     ]],
     [3, [
-        "{n} wins in a row. Who's carrying you?",
-        "{n}-game win streak. Enjoy it, the drop is coming.",
-        "{n} straight wins. Suspicious.",
-        "Win streak: {n}. Don't get comfortable."
+        "{n} wins in a row. Heating up.",
+        "{n}-game win streak. Momentum's on your side.",
+        "{n} straight wins. Nice run.",
+        "Win streak: {n}. Keep it going."
     ]]
 ];
 
@@ -399,18 +391,18 @@ const DERANK_LINES = [
 ];
 
 const STREAK_BROKEN_LINES = [
-    "Finally. Only took {n} losses.",
-    "Losing streak over after {n} games. Mercy.",
-    "{n}-game losing streak broken. The prophecy is fulfilled.",
-    "{n} losses, then a win. Character arc.",
-    "After {n} straight losses, a W. Let's not overreact.",
-    "{n} Ls and then this. Even a broken clock.",
-    "The {n}-game losing streak is dead. Long live the next one.",
-    "A win after {n} losses. Your teammates must be relieved.",
-    "It only took {n} games to remember how to win.",
-    "{n}-game losing streak broken. Medical professionals are stunned.",
-    "{n} losses and a win. That's growth, kind of.",
-    "The curse is lifted after {n} games. For now."
+    "Losing streak over after {n} games. Knew you had it in you.",
+    "{n} losses, then a win. That's resilience.",
+    "{n}-game losing streak broken. Back on track.",
+    "After {n} tough games, a well-deserved W.",
+    "The {n}-game losing streak is done. Here's to a winning one.",
+    "A win after {n} losses. You never stopped pushing.",
+    "It took {n} games, but you pushed through. Well done.",
+    "{n} losses couldn't keep you down.",
+    "Streak broken after {n}. That's the comeback starting.",
+    "You bounced back after {n} losses. That takes guts.",
+    "{n} losses and you kept showing up. That's how you get here.",
+    "The curse is lifted after {n} games. Great game."
 ];
 
 // Street Brawl first since those games are always short
