@@ -100,6 +100,10 @@ async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean) 
 
     fields.push({ name: "Top Heroes", value: (await topHeroes(rows)).join("\n") });
 
+    // Rows are newest first, flipped so it reads oldest to newest like a form guide
+    const form = rows.slice(0, 10).reverse().map(x => x.won ? "W" : "L").join("");
+    fields.push({ name: `Last ${form.length} (oldest → newest)`, value: `\`${form}\`` });
+
     return {
         title,
         color: wins / rows.length >= 0.5 ? COLOURS.green : COLOURS.red,
