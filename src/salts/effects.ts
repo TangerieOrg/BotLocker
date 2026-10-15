@@ -12,8 +12,9 @@ const TICK_MS = 60 * 1000;
 const SEED_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const CHECK_BATCH = 100;
 // deadlock-api allows 30 of these a minute
-const MAX_CHECK_BATCHES = 10;
-const CHECK_GAP_MS = 2500;
+const CHECK_GAP_MS = 2100;
+// Their salt reads from the database allow 100 a second
+const SALT_READ_CONCURRENCY = 10;
 const UPLOAD_BATCH = 50;
 const MAX_ATTEMPTS = 5;
 const RETRY_BASE_S = 10 * 60;
@@ -49,24 +50,27 @@ async function seed() {
     if(added > 0) log(`Queued ${added} stored matches for salts`);
 }
 
-// Asks deadlock-api which matches it has. Only ever reads, so it runs even with uploading off
+async function checkRow(row : SaltRow, known : Set<number>) {
+    if(!known.has(row.match_id)) return await setSaltStatus(row.match_id, "missing");
+
+    // Keeping their salts is a bonus, covered either way
+    const salts = await getStoredSalts(row.match_id).catch(() => undefined);
+    const stored = salts && hasSalt(salts);
+    await setSaltStatus(row.match_id, "covered", stored ? salts : undefined, stored ? "deadlock-api" : undefined);
+}
+
+// Asks deadlock-api which matches it has, working through everything unchecked in one go.
+// Only ever reads, so it runs even with uploading off
 async function runChecks() {
-    for(let i = 0; i < MAX_CHECK_BATCHES; i++) {
+    while(true) {
         if(now() < saltState.apiPausedUntil) return;
         const rows = await dueRows("pending", CHECK_BATCH);
         if(rows.length == 0) return;
 
         try {
             const known = await getKnownMatches(rows.map(x => x.match_id));
-            for(const row of rows) {
-                if(!known.has(row.match_id)) {
-                    await setSaltStatus(row.match_id, "missing");
-                    continue;
-                }
-                // Keeping their salts is a bonus, covered either way
-                const salts = await getStoredSalts(row.match_id).catch(() => undefined);
-                const stored = salts && hasSalt(salts);
-                await setSaltStatus(row.match_id, "covered", stored ? salts : undefined, stored ? "deadlock-api" : undefined);
+            for(let i = 0; i < rows.length; i += SALT_READ_CONCURRENCY) {
+                await Promise.all(rows.slice(i, i + SALT_READ_CONCURRENCY).map(x => checkRow(x, known)));
             }
         } catch(err) {
             apiFailed(err);
