@@ -73,6 +73,26 @@ await withDb(db => {
         CREATE INDEX IF NOT EXISTS matches_account_time ON matches (account_id, start_time);
         CREATE INDEX IF NOT EXISTS matches_unannounced ON matches (match_id) WHERE announced_at IS NULL;
 
+        -- One row per match (matches is per player), tracks getting its salts and sharing them with deadlock-api
+        CREATE TABLE IF NOT EXISTS match_salts (
+            match_id INTEGER PRIMARY KEY,
+            match_end_time INTEGER NOT NULL,
+            salt_check_after INTEGER NOT NULL,
+            next_attempt_at INTEGER NOT NULL DEFAULT 0,
+            -- pending, missing, fetched, uploaded, covered or failed
+            status TEXT NOT NULL DEFAULT 'pending',
+            cluster_id INTEGER,
+            metadata_salt INTEGER,
+            replay_salt INTEGER,
+            source TEXT,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            fetched_at INTEGER,
+            uploaded_at INTEGER
+        );
+
+        CREATE INDEX IF NOT EXISTS match_salts_due ON match_salts (status, salt_check_after);
+
         CREATE TABLE IF NOT EXISTS kv (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL

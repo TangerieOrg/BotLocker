@@ -17,14 +17,26 @@ message GetMatchHistoryResponse {
   }
   optional int32 result = 1; optional uint64 continue_cursor = 2; repeated Match matches = 3;
 }
+message GetMatchMetaData { optional uint64 match_id = 1; optional uint32 metadata_salt = 3; optional uint32 target_account_id = 4; }
+message GetMatchMetaDataResponse {
+  optional int32 result = 1; optional uint32 replay_salt = 2; optional uint32 metadata_salt = 3;
+  optional uint32 replay_valid_through = 4; optional uint32 replay_group_id = 5;
+}
 `;
 
 const HISTORY_REQUEST = 9112;
+const METADATA_REQUEST = 9167;
 
 export const GcResult = {
+    InternalError: 0,
     Success: 1,
     InvalidPermission: 2,
-    RateLimited: 5
+    TemporarilyDisabled: 3,
+    TooBusy: 4,
+    RateLimited: 5,
+    InvalidMatch: 6,
+    MatchInFlight: 7,
+    Timeout: 8
 } as const;
 
 export class GcError extends Error {
@@ -36,6 +48,8 @@ export class GcError extends Error {
 const root = protobuf.parse(PROTO, { keepCase: true }).root;
 const Request = root.lookupType("GetMatchHistory");
 const Response = root.lookupType("GetMatchHistoryResponse");
+const MetaRequest = root.lookupType("GetMatchMetaData");
+const MetaResponse = root.lookupType("GetMatchMetaDataResponse");
 
 // Valve doesn't publish the limits, these follow what deadlock-api-ingest uses
 const MIN_GAP_MS = 2000;
@@ -89,4 +103,29 @@ export const getGcHistory = (accountId : number, cursor? : number) => queue.run(
         ranked_delta: x.ranked_delta ?? null
     }));
     return { matches, cursor: out.continue_cursor as number | undefined };
+});
+
+export interface MatchSaltResult {
+    result: number;
+    cluster_id: number | null;
+    metadata_salt: number | null;
+    replay_salt: number | null;
+}
+
+// Salts are limited far harder than history, the caller keeps its own budget and handles a non-success result.
+// Shares the queue and spacing with history but not its rate limit pause
+export const getGcMatchSalts = (matchId : number) => queue.run(async () : Promise<MatchSaltResult> => {
+    await sleep(Math.max(0, lastAt + MIN_GAP_MS - Date.now()));
+    lastAt = Date.now();
+
+    const raw = await gcJob(METADATA_REQUEST, MetaRequest.encode(MetaRequest.create({ match_id: matchId })).finish());
+    const out = MetaResponse.toObject(MetaResponse.decode(raw), { longs: Number });
+
+    return {
+        result: out.result ?? GcResult.InternalError,
+        // deadlock-api calls the replay group the cluster
+        cluster_id: out.replay_group_id ?? null,
+        metadata_salt: out.metadata_salt ?? null,
+        replay_salt: out.replay_salt ?? null
+    };
 });

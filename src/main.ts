@@ -2,6 +2,7 @@ import { startAnnouncer } from "./announce/effects.ts";
 import { startDiscord } from "./discord/client.ts";
 import { startGuardNotice } from "./discord/guard.ts";
 import { startPresence } from "./discord/presence.ts";
+import { startSalts } from "./salts/effects.ts";
 import { startSteam } from "./steam/client.ts";
 import { startFriends } from "./steam/friends.ts";
 import { startTracker } from "./tracker/effects.ts";
@@ -12,6 +13,7 @@ startTracker();
 startAnnouncer();
 startGuardNotice();
 startPresence();
+startSalts();
 
 startSteam();
 await startDiscord();

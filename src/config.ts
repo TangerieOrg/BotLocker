@@ -28,3 +28,10 @@ export const STEAM_BOT_PASSWORD = Deno.env.get("STEAM_BOT_PASSWORD");
 export const GC_POLL_INTERVAL_MS = getNumber("GC_POLL_INTERVAL_MS") ?? 60 * 60 * 1000;
 export const MAX_NOTIFY_AGE_S = (getNumber("MAX_NOTIFY_AGE_H") ?? 6) * 60 * 60;
 export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;
+
+// Salts are fetched from the game coordinator and shared with deadlock-api. Off still lets the read-only deadlock-api checks run
+export const SALT_UPLOAD = getBool("SALT_UPLOAD") ?? true;
+// Wait this long after a match ends so deadlock-api's own ingest gets there first, the game coordinator's salt limit is tight
+export const SALT_DELAY_S = (getNumber("SALT_DELAY_MS") ?? 30 * 60 * 1000) / 1000;
+export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 30 * 60 * 1000;
+export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 40;

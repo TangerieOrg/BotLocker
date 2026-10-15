@@ -1,4 +1,5 @@
 import type { MatchHistoryEntry } from "../deadlock/types.ts";
+import { SALT_DELAY_S } from "../config.ts";
 import { now } from "../helpers/now.ts";
 import { asDbFunction, transaction } from "./connection.ts";
 import type { LossTotals, Match, Totals } from "./types.ts";
@@ -24,11 +25,20 @@ export const insertMatches = asDbFunction((db, entries : MatchHistoryEntry[], an
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (account_id, match_id) DO NOTHING
     `);
+    using insertSalt = db.prepare(`--sql
+        INSERT INTO match_salts (match_id, match_end_time, salt_check_after) VALUES (?, ?, ?)
+        ON CONFLICT (match_id) DO NOTHING
+    `);
     const announcedAt = announced ? now() : null;
 
     return transaction(db, () => entries
         .filter(x => TRACKED_MATCH_MODES.includes(x.match_mode))
         .filter(x => !isEarlyEnded(x))
+        .filter(x => {
+            const end = x.start_time + x.match_duration_s;
+            insertSalt.run(x.match_id, end, end + SALT_DELAY_S);
+            return true;
+        })
         .filter(x => insert.run(
             x.account_id, x.match_id, x.hero_id, x.start_time, x.match_duration_s, x.match_result == x.player_team ? 1 : 0,
             x.player_kills, x.player_deaths, x.player_assists, x.net_worth, x.last_hits,
