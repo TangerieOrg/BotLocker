@@ -5,7 +5,7 @@ import { getUser, LinkStore } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { fetchMembers } from "../util.ts";
 
-const WINDOW_S = 7 * 24 * 60 * 60;
+const WINDOW_S = 14 * 24 * 60 * 60;
 
 export const data = new SlashCommandBuilder()
     .setName("leaderboard")
@@ -38,7 +38,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const streetBrawl = await board(since, true, members);
 
     if(standard.length == 0 && streetBrawl.length == 0) {
-        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", "Nobody has played in the last 7 days")] });
+        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", "Nobody has played in the last 2 weeks")] });
     }
 
     const lines : string[] = [];
@@ -49,7 +49,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         title: "Loserboard",
         description: lines.join("\n").slice(0, 4096),
         color: COLOURS.gold,
-        footer: { text: "Last 7 days" },
+        footer: { text: "Last 2 weeks" },
         timestamp: new Date(since * 1000).toISOString()
     }] });
 }
