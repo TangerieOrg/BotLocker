@@ -1,5 +1,5 @@
 import type { APIEmbed, APIEmbedField } from "discord.js";
-import { BoardStore } from "../board/BoardStore.ts";
+import { lossWindowStart } from "../helpers/window.ts";
 import { getLossTotals, getStreak, type Match } from "../db/mod.ts";
 import { heroIcon, heroName, rankName } from "../deadlock/assets.ts";
 import { COLOURS, formatDuration, modeName } from "../discord/embeds.ts";
@@ -21,7 +21,7 @@ async function describe({ match, name } : Announced) {
     const ranked = match.match_mode == 4 && match.badge;
     const ctx = {
         ...matchContext(match, hero, ranked ? await rankName(match.badge) : undefined),
-        ...lossContext(await getLossTotals(match.account_id, BoardStore.get().periodStart)),
+        ...lossContext(await getLossTotals(match.account_id, lossWindowStart())),
         name
     };
 

@@ -1,5 +1,5 @@
 import { type Message } from "discord.js";
-import { BoardStore } from "../board/BoardStore.ts";
+import { lossWindowStart } from "../helpers/window.ts";
 import { getLastMatch, getLossTotals, getStreak } from "../db/mod.ts";
 import { heroName, rankName } from "../deadlock/assets.ts";
 import { getAccount } from "../links/LinkStore.ts";
@@ -17,7 +17,7 @@ export async function handleMention(msg : Message) {
 
     const line = getMentionLine(accountId != null && last ? {
         ...matchContext(last, await heroName(last.hero_id), last.match_mode == 4 && last.badge ? await rankName(last.badge) : undefined),
-        ...lossContext(await getLossTotals(accountId, BoardStore.get().periodStart)),
+        ...lossContext(await getLossTotals(accountId, lossWindowStart())),
         name,
         won: !!last.won,
         streak: await getStreak(accountId),

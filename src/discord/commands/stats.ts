@@ -1,5 +1,4 @@
 import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { BoardStore } from "../../board/BoardStore.ts";
 import { getPlayerMatches, type Match } from "../../db/mod.ts";
 import { heroName, rankName } from "../../deadlock/assets.ts";
 import { now } from "../../helpers/now.ts";
@@ -10,7 +9,6 @@ const DAY = 24 * 60 * 60;
 
 const PERIODS : Record<string, { name: string, label: string, since: () => number }> = {
     all: { name: "All time", label: "All stored games", since: () => 0 },
-    reset: { name: "Since last reset", label: "Since last reset", since: () => BoardStore.get().periodStart },
     day: { name: "Last 24 hours", label: "Last 24 hours", since: () => now() - DAY },
     week: { name: "Last 7 days", label: "Last 7 days", since: () => now() - 7 * DAY },
     month: { name: "Last 30 days", label: "Last 30 days", since: () => now() - 30 * DAY }

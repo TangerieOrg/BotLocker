@@ -20,8 +20,8 @@ Everything comes from a dedicated Steam account (needs Deadlock access) asking t
 - The first time it sees someone it stores about 3 months of history without announcing it
 - When a linked friend stops playing Deadlock their history is checked a few times over the next 10 minutes, anything new is announced
 - Everyone is also checked every `GC_POLL_INTERVAL_MS` (1 hour) as a backstop
-- `/leaderboard` is the loserboard since the last `/resetrecord`
+- `/leaderboard` is the loserboard over the last 2 weeks
 - `/online` shows who's in Deadlock, online on Steam or played recently, the bot status rotates through the same, and @ing the bot gets a reply about your last game. Online status only covers friends of the Steam bot
 - If the Steam login needs a Steam Guard code it DMs the owner, send it with `/steamguard`. The login token is saved after that
 
-State lives in small `@tangerie/global-store` stores (`SteamStore`, `LinkStore`, `BoardStore`, `TrackerStore`, `DiscordStore`), the rest are effects in `start*` functions that react to them
+State lives in small `@tangerie/global-store` stores (`SteamStore`, `LinkStore`, `TrackerStore`, `DiscordStore`), the rest are effects in `start*` functions that react to them

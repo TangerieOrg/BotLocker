@@ -59,7 +59,7 @@ const OTHER_GAME_STATUS = [
     "dodging the queue with {game}"
 ];
 
-// losses/lostSeconds are since the guild's last reset, lines needing them are skipped without any
+// losses/lostSeconds are over the last 2 weeks, lines needing them are skipped without any
 export function getOnlineStatusLine(ctx : Omit<StatusContext, "name" | "inDeadlock"> & { losses?: number, lostSeconds?: number }) {
     const lines = ctx.game ? OTHER_GAME_STATUS :
         ctx.streak <= -3 ? ONLINE_TILT_STATUS :

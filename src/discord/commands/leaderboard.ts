@@ -1,11 +1,9 @@
 import { type ChatInputCommandInteraction, type GuildMember, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { getPeriodTotals, getStreak } from "../../db/mod.ts";
-import { now } from "../../helpers/now.ts";
+import { lossWindowStart } from "../../helpers/window.ts";
 import { getUser, LinkStore } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { fetchMembers } from "../util.ts";
-
-const WINDOW_S = 14 * 24 * 60 * 60;
 
 export const data = new SlashCommandBuilder()
     .setName("leaderboard")
@@ -30,8 +28,7 @@ async function board(since : number, streetBrawl : boolean, members : Map<string
 export async function execute(interaction : ChatInputCommandInteraction) {
     await interaction.deferReply();
 
-    // Sliding window ending now, rather than counting from the last /resetrecord
-    const since = now() - WINDOW_S;
+    const since = lossWindowStart();
     const members = await fetchMembers(interaction.guild!, [...LinkStore.get().links.keys()]);
 
     const standard = await board(since, false, members);

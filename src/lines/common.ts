@@ -11,7 +11,7 @@ export interface LineContext {
     minutes?: number;
     mode?: number;
     rank?: string;
-    // Since the guild's last /resetrecord
+    // Over the last 2 weeks
     losses?: number;
     lostSeconds?: number;
 }

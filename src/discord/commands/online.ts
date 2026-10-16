@@ -1,5 +1,5 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, SlashCommandBuilder } from "discord.js";
-import { BoardStore } from "../../board/BoardStore.ts";
+import { lossWindowStart } from "../../helpers/window.ts";
 import { getLastMatch, getLossTotals, getStreak } from "../../db/mod.ts";
 import { heroFromCodename, heroName } from "../../deadlock/assets.ts";
 import { LinkStore } from "../../links/LinkStore.ts";
@@ -36,7 +36,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const name = (x : Player) => members.get(x.userId)!.displayName;
     const players = onlinePlayers().filter(x => members.has(x.userId));
     const tier = (kind : Player["activity"]["kind"]) => players.filter(x => x.activity.kind == kind);
-    const lossesOf = async (x : Player) => lossContext(await getLossTotals(x.accountId, BoardStore.get().periodStart));
+    const lossesOf = async (x : Player) => lossContext(await getLossTotals(x.accountId, lossWindowStart()));
 
     const sections : string[] = [];
 
