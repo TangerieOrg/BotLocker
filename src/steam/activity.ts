@@ -1,5 +1,5 @@
 import { LinkStore } from "../links/LinkStore.ts";
-import { DEADLOCK_APP_ID, gameName, isMatchDisplay, partyOf, SteamStore } from "./SteamStore.ts";
+import { DEADLOCK_APP_ID, gameName, isMatchDisplay, type OnlineStatus, partyOf, SteamStore } from "./SteamStore.ts";
 
 // Worked out from rich presence each time it's needed, hero and mode are still the raw tokens (#Steam_RP_hero_chessmaster)
 export type Activity =
@@ -18,8 +18,9 @@ export const TIERS : Tier[] = ["match", "queue", "deadlock", "game", "online"];
 const QUEUE_DISPLAY = "#steam_citadel_rp_findingmatch";
 
 // Undefined when they're offline (or not a friend of the bot, it can't see them)
-export function activityOf(id : number) : Activity | undefined {
-    const status = SteamStore.get().online.get(id);
+export const activityOf = (id : number) => activityFromStatus(SteamStore.get().online.get(id), partyOf(id));
+
+export function activityFromStatus(status : OnlineStatus | undefined, party? : string) : Activity | undefined {
     if(!status) return undefined;
 
     if(status.appId != DEADLOCK_APP_ID) {
@@ -27,7 +28,6 @@ export function activityOf(id : number) : Activity | undefined {
         return status.appId || game ? { kind: "game", game } : { kind: "online" };
     }
 
-    const party = partyOf(id);
     const rich = status.rich ?? {};
 
     // Hero select is already InGame but has no hero or minutes yet

@@ -7,10 +7,12 @@ import { getKv, setKv } from "../db/mod.ts";
 import { readLine } from "../helpers/cli.ts";
 import { logger } from "../helpers/log.ts";
 import { toSteam64 } from "../helpers/steam.ts";
+import { heroFromCodename } from "../deadlock/assets.ts";
+import { activityFromStatus, modeLabel } from "./activity.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, type OnlineStatus, sameRich, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, gameName, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -144,17 +146,57 @@ client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
     if(name) setPersona(id, { name, avatar: field("avatar_url_full") });
 });
 
-// steam_display first, the rest alphabetical
-const formatRich = (rich? : Readonly<Record<string, string>>) => !rich ? "none" : Object.entries(rich)
-    .sort(([a], [b]) => a == "steam_display" ? -1 : b == "steam_display" ? 1 : a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join(" ");
+const gameLabel = (status? : OnlineStatus) => !status ? undefined : status.appId == DEADLOCK_APP_ID ? "Deadlock" : gameName(status);
+
+// What changed between two statuses, in words. Minutes into a match are ignored on purpose
+async function describeChange(before? : OnlineStatus, after? : OnlineStatus) : Promise<string[]> {
+    if(!before && !after) return [];
+    if(!after) return ["went offline"];
+
+    const out : string[] = [];
+    if(!before) out.push("came online");
+
+    const wasGame = gameLabel(before);
+    const nowGame = gameLabel(after);
+    if(wasGame != nowGame) {
+        if(nowGame) out.push(nowGame == "Deadlock" ? "opened Deadlock" : `started playing ${nowGame}`);
+        else out.push(wasGame == "Deadlock" ? "left Deadlock" : `stopped playing ${wasGame}`);
+    }
+    if(nowGame != "Deadlock") return out;
+
+    const wasDeadlock = wasGame == "Deadlock";
+    const was = wasDeadlock ? activityFromStatus(before) : undefined;
+    const now = activityFromStatus(after);
+    if(now?.kind == "match") {
+        const sameMatch = was?.kind == "match" && was.hero == now.hero && was.mode == now.mode;
+        if(!sameMatch) {
+            const hero = await heroFromCodename(now.hero);
+            const mode = modeLabel(now.mode);
+            out.push(`${hero ? `is playing ${hero}` : "is in hero select"}${mode ? ` (${mode})` : ""}`);
+        }
+    } else if(now?.kind == "queue") {
+        if(was?.kind != "queue") out.push("is queueing");
+    } else if(was && was.kind != now?.kind && was.kind != "match") {
+        out.push(was.kind == "queue" ? "left the queue" : "back in the menus");
+    }
+
+    const wasParty = wasDeadlock ? before?.rich?.steam_player_group : undefined;
+    const nowParty = after.rich?.steam_player_group;
+    if(wasParty != nowParty) out.push(!wasParty ? "joined a party" : !nowParty ? "left their party" : "switched party");
+
+    return out;
+}
+
+async function logPresence(id : number, before? : OnlineStatus, after? : OnlineStatus) {
+    const name = SteamStore.get().personas.get(id)?.name;
+    const who = name ? `${name} (${id})` : `${id}`;
+    for(const change of await describeChange(before, after)) log(`${who} ${change}`);
+}
 
 function updateStatus(id : number, status? : OnlineStatus) {
     const before = SteamStore.get();
 
-    // Everything Deadlock sets, for working out heroes, modes and parties from it later
-    if(!sameRich(before.online.get(id)?.rich, status?.rich)) log(`${id} rich presence ${formatRich(status?.rich)}`);
+    void logPresence(id, before.online.get(id), status).catch(err => error("Couldn't log presence change", err));
 
     setOnline(id, status);
 
