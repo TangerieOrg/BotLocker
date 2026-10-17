@@ -1,7 +1,7 @@
 import { type APIEmbed, type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { getPartnerStats, getPlayerMatches, type Match } from "../../db/mod.ts";
 import { heroIcon, heroList, heroName, rankName } from "../../deadlock/assets.ts";
-import { formatPlayed, kda, PERIODS, pct, record, streaks, sum } from "../../helpers/stats.ts";
+import { formatPlayed, kda, PERIODS, pct, record, streaks, sum, topByWinRate } from "../../helpers/stats.ts";
 import { getAccount, getUser } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
 
@@ -32,7 +32,7 @@ export async function autocomplete(interaction : AutocompleteInteraction) {
 
 async function topHeroes(rows : Match[]) {
     const byHero = Map.groupBy(rows, x => x.hero_id);
-    const top = [...byHero].sort(([, a], [, b]) => b.length - a.length || kda(b) - kda(a)).slice(0, 5);
+    const top = topByWinRate([...byHero], ([, g]) => g.length, ([, g]) => sum(g, x => x.won));
 
     return await Promise.all(top.map(async ([id, games]) =>
         `**${await heroName(id)}** - ${games.length} game${games.length == 1 ? "" : "s"} · ${pct(sum(games, x => x.won), games.length)} WR · ${kda(games).toFixed(1)} KDA`
@@ -40,7 +40,7 @@ async function topHeroes(rows : Match[]) {
 }
 
 async function partnerLines(interaction : ChatInputCommandInteraction, accountId : number, since : number, streetBrawl : boolean, heroId? : number) {
-    const partners = await getPartnerStats(accountId, since, streetBrawl, heroId);
+    const partners = topByWinRate(await getPartnerStats(accountId, since, streetBrawl, heroId), x => x.games, x => x.wins);
     return await Promise.all(partners.map(async x => {
         const userId = getUser(x.account_id);
         const member = userId ? await interaction.guild!.members.fetch(userId).catch(() => undefined) : undefined;

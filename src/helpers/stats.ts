@@ -12,6 +12,17 @@ export function record(rows : { won : number }[]) {
     return `${wins}W - ${rows.length - wins}L (${pct(wins, rows.length)})`;
 }
 
+export const MIN_GAMES = 3;
+
+// Best win rate first, ties by games. Anything under the minimum is dropped unless that leaves nothing
+export function topByWinRate<T>(items : T[], games : (x : T) => number, wins : (x : T) => number, limit = 5) {
+    const rate = (x : T) => wins(x) / games(x);
+    const enough = items.filter(x => games(x) >= MIN_GAMES);
+    return (enough.length > 0 ? enough : items)
+        .sort((a, b) => rate(b) - rate(a) || games(b) - games(a))
+        .slice(0, limit);
+}
+
 export function formatPlayed(s : number) {
     const h = Math.floor(s / 3600);
     const m = Math.floor(s % 3600 / 60);
