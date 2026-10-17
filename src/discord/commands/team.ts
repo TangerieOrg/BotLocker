@@ -122,9 +122,8 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, names));
         if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, names));
 
-        const note = users.length > STREET_BRAWL_MAX ? "standard only · " : "";
         embeds[0].author = { name: names.join(" + ") };
-        embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games · ${note}same team, not necessarily queued together` };
+        embeds.at(-1)!.footer = { text: [period.label, `${standard.length + streetBrawl.length} games`, ...users.length > STREET_BRAWL_MAX ? ["standard only"] : []].join(" · ") };
         if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
 
         return embeds;

@@ -122,7 +122,7 @@ export const getPlayerMatches = asDbFunction((db, accountId : number, since : nu
     return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
 });
 
-// Every linked teammate a player has shared a team with, with games and wins together. Same caveat as getTeamMatches
+// Every linked teammate a player has shared a team with, with games and wins together
 export const getPartnerStats = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean, heroId? : number) => {
     using stmt = db.prepare<{ account_id : number, games : number, wins : number }>(`--sql
         SELECT b.account_id AS account_id, COUNT(*) AS games, SUM(a.won) AS wins FROM matches a
@@ -134,7 +134,7 @@ export const getPartnerStats = asDbFunction((db, accountId : number, since : num
 });
 
 // Games all the given accounts shared a team in (same match, same result), newest first. Each game is one row per
-// account in the order given. There's no party id stored, so this can't tell a queued team from people who landed together
+// account in the order given
 export const getTeamMatches = asDbFunction((db, accountIds : number[], since : number, streetBrawl : boolean) => {
     const marks = accountIds.map(() => "?").join(", ");
     using stmt = db.prepare<Match>(`--sql
