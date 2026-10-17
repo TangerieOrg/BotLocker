@@ -21,7 +21,7 @@ Everything comes from a dedicated Steam account (needs Deadlock access) asking t
 - When a linked friend stops playing Deadlock their history is checked a few times over the next 10 minutes, anything new is announced
 - Everyone is also checked every `GC_POLL_INTERVAL_MS` (1 hour) as a backstop
 - `/leaderboard` is the loserboard over the last 2 weeks
-- `/stats` shows a linked player's record, KDA and top heroes per mode (optionally by period or hero), plus their win rate with linked teammates they've shared a team with. Top heroes and partners are the best 5 by win rate, among those with at least 3 games (all of them if none qualify). `/duo` does the same for one pair. Neither can tell a queued duo from two people who landed on the same team
+- `/stats` shows a linked player's record, KDA and top heroes per mode (optionally by period or hero), plus their win rate with linked teammates they've shared a team with. Top heroes and partners are the best 5 by win rate, among those with at least 3 games (all of them if none qualify). `/team` does the same for a group of up to 6 linked players (5 or more is standard only, since Street Brawl teams max out at 4). Neither can tell a queued group from people who landed on the same team
 - `/online` shows who's in Deadlock, online on Steam or played recently, the bot status rotates through the same, and @ing the bot gets a reply about your last game. Online status only covers friends of the Steam bot
 - If the Steam login needs a Steam Guard code it DMs the owner, send it with `/steamguard` (add `username:` when more than one account is waiting). The login token is saved after that
 

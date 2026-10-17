@@ -81,7 +81,7 @@ async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean, 
     }
 
     if(!heroFiltered) fields.push({ name: "Top Heroes", value: (await topHeroes(rows)).join("\n") });
-    if(partners.length > 0) fields.push({ name: "Duo Partners", value: partners.join("\n") });
+    if(partners.length > 0) fields.push({ name: "Teammates", value: partners.join("\n") });
 
     // Rows are newest first, flipped so it reads oldest to newest like a form guide
     const form = rows.slice(0, 10).reverse().map(x => x.won ? "W" : "L").join("");

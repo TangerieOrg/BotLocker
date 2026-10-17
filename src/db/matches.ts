@@ -122,7 +122,7 @@ export const getPlayerMatches = asDbFunction((db, accountId : number, since : nu
     return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
 });
 
-// Every linked teammate a player has shared a team with, with games and wins together. Same caveat as getDuoMatches
+// Every linked teammate a player has shared a team with, with games and wins together. Same caveat as getTeamMatches
 export const getPartnerStats = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean, heroId? : number) => {
     using stmt = db.prepare<{ account_id : number, games : number, wins : number }>(`--sql
         SELECT b.account_id AS account_id, COUNT(*) AS games, SUM(a.won) AS wins FROM matches a
@@ -133,17 +133,19 @@ export const getPartnerStats = asDbFunction((db, accountId : number, since : num
     return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
 });
 
-// Games two accounts shared a team in (same match, same result), newest first. There's no party id stored,
-// so this can't tell a queued duo from two people who landed on the same team
-export const getDuoMatches = asDbFunction((db, accountA : number, accountB : number, since : number, streetBrawl : boolean) => {
+// Games all the given accounts shared a team in (same match, same result), newest first. Each game is one row per
+// account in the order given. There's no party id stored, so this can't tell a queued team from people who landed together
+export const getTeamMatches = asDbFunction((db, accountIds : number[], since : number, streetBrawl : boolean) => {
+    const marks = accountIds.map(() => "?").join(", ");
     using stmt = db.prepare<Match>(`--sql
-        SELECT a.* FROM matches a
-        JOIN matches b ON b.match_id = a.match_id AND b.won = a.won
-        WHERE a.account_id = ? AND b.account_id = ? AND a.start_time >= ? AND (a.game_mode = 4) = ?
-        ORDER BY a.match_id DESC
+        SELECT * FROM matches
+        WHERE account_id IN (${marks}) AND start_time >= ? AND (game_mode = 4) = ? AND match_id IN (
+            SELECT match_id FROM matches WHERE account_id IN (${marks})
+            GROUP BY match_id, won HAVING COUNT(*) = ?
+        )
+        ORDER BY match_id DESC
     `);
-    const mode = Number(streetBrawl);
-    const a = stmt.all(accountA, accountB, since, mode);
-    const b = stmt.all(accountB, accountA, since, mode);
-    return a.map((x, i) => ({ a: x, b: b[i] }));
+    const rows = stmt.all(...accountIds, since, Number(streetBrawl), ...accountIds, accountIds.length);
+    const byMatch = Map.groupBy(rows, x => x.match_id);
+    return [...byMatch.values()].map(game => accountIds.map(id => game.find(x => x.account_id == id)!));
 });
