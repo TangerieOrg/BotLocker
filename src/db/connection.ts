@@ -93,6 +93,23 @@ await withDb(db => {
 
         CREATE INDEX IF NOT EXISTS match_salts_due ON match_salts (status, salt_check_after);
 
+        -- One row per burst of salt requests on an account, from its first request until Steam rate limited it (or it spent its allowance),
+        -- kept to see how many requests each spacing gets before the limit
+        CREATE TABLE IF NOT EXISTS salt_fetch_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account TEXT NOT NULL,
+            interval_ms INTEGER NOT NULL,
+            started_at INTEGER NOT NULL,
+            last_at INTEGER NOT NULL,
+            ended_at INTEGER,
+            -- Every request sent, including the one that got rate limited
+            requests INTEGER NOT NULL DEFAULT 0,
+            -- Requests the game coordinator answered with a success
+            ok INTEGER NOT NULL DEFAULT 0,
+            -- open, rate_limited, cap (spent the allowance without being limited) or idle (nothing to fetch for a day)
+            outcome TEXT NOT NULL DEFAULT 'open'
+        );
+
         CREATE TABLE IF NOT EXISTS kv (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL

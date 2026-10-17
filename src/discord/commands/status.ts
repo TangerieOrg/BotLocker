@@ -1,5 +1,6 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../../config.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_UPLOAD } from "../../config.ts";
+import { getOpenRun, getRecentRuns, type FetchRun } from "../../db/saltRuns.ts";
 import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
 import { saltState } from "../../salts/effects.ts";
@@ -23,6 +24,9 @@ const ORDER : [SaltStatus, string][] = [
 ];
 
 const when = (at : number) => `<t:${at}:R>`;
+const spacing = (ms : number) => ms % 60000 == 0 ? `${ms / 60000}m` : `${ms / 1000}s`;
+const describeRun = (x : FetchRun) =>
+    `${x.account} ${spacing(x.interval_ms)}: ${x.ok}/${x.requests} ok, ${x.outcome.replace("_", " ")} ${when(x.ended_at ?? x.last_at)}`;
 const pause = (until : number) => until > now() ? `paused until ${when(until)}` : "ok";
 
 export async function execute(interaction : ChatInputCommandInteraction) {
@@ -32,9 +36,11 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const at = now();
     const accounts = getAccounts();
-    const [summary, logs] = await Promise.all([
+    const [summary, logs, runs, recent] = await Promise.all([
         getSaltSummary(at),
-        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username)))
+        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username))),
+        Promise.all(accounts.map(x => getOpenRun(x.username))),
+        getRecentRuns(8)
     ]);
 
     const total = Object.values(summary.counts).reduce((a, b) => a + b, 0);
@@ -45,8 +51,9 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         const parts = [`${account.username}: ${fetches.length}/${SALT_FETCH_DAILY_CAP}`];
         if(fetches.length >= SALT_FETCH_DAILY_CAP) {
             parts.push(`allowance spent (or rate limited), waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
-        } else if(fetches.length > 0) {
-            const nextSlot = Math.max(...fetches) + SALT_FETCH_INTERVAL_MS / 1000;
+        } else if(runs[i]) {
+            parts.push(`${spacing(runs[i]!.interval_ms)} spacing`);
+            const nextSlot = Math.max(...fetches) + runs[i]!.interval_ms / 1000;
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
         }
         return parts.join(", ");
@@ -73,6 +80,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             description: `${total} matches tracked\n${counts}`,
             fields: [
                 { name: "Queue", value: queue.join(", ") },
+                { name: "Spacing experiment (newest first)", value: recent.length ? recent.map(describeRun).join("\n") : "No runs yet" },
                 { name: "GC budget", value: budget.join("\n") },
                 {
                     name: "Services",

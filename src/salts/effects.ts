@@ -1,5 +1,6 @@
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVALS_MS, SALT_UPLOAD } from "../config.ts";
 import { exhaustFetchLog, getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
+import { countRunRequest, endRun, type FetchRun, getOpenRun, startRun } from "../db/saltRuns.ts";
 import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
@@ -85,13 +86,15 @@ const logUser = (account : SteamAccount) => account.main ? undefined : account.u
 // Matches being fetched right now, so two accounts never take the same one
 const inFlight = new Set<number>();
 
-// Like deadlock-api-ingest: each account works through its daily allowance in a burst, one request every
-// SALT_FETCH_INTERVAL_MS, until it's spent or Steam rate limits it (which spends the rest of it)
+// Like deadlock-api-ingest: each account works through its daily allowance in a burst, one request every run.interval_ms,
+// until it's spent or Steam rate limits it (which spends the rest of it). Every burst is a run with its own spacing,
+// and a new one only starts from a clean 24h window, so salt_fetch_runs says how far each spacing got
 async function fetchLoop(account : SteamAccount) {
     while(true) {
         try {
-            if(await fetchNext(account)) {
-                await sleep(SALT_FETCH_INTERVAL_MS);
+            const interval = await fetchNext(account);
+            if(interval) {
+                await sleep(interval);
                 continue;
             }
         } catch(err) {
@@ -101,27 +104,39 @@ async function fetchLoop(account : SteamAccount) {
     }
 }
 
-// Whether a request went out
+// The spacing of the request that went out, if one did
 async function fetchNext(account : SteamAccount) {
-    if(!SALT_UPLOAD || !account.isReady()) return false;
+    if(!SALT_UPLOAD || !account.isReady()) return;
 
     const fetches = await getFetchLog(now(), logUser(account));
-    if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
-    if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return false;
+    let run = await getOpenRun(account.username);
+
+    // Everything in the window expired with the run still open, so it's been a day without a request
+    if(run && fetches.length == 0) {
+        await endRun(run.id, run.last_at, "idle");
+        run = undefined;
+    }
+    if(fetches.length >= SALT_FETCH_DAILY_CAP) {
+        if(run) await endRun(run.id, now(), "cap");
+        return;
+    }
+    if(!run && fetches.length > 0) return;
+    if(run && now() - Math.max(...fetches) < run.interval_ms / 1000) return;
 
     const row = (await dueRows("missing", inFlight.size + 1)).find(x => !inFlight.has(x.match_id));
-    if(!row) return false;
+    if(!row) return;
 
+    run ??= await startRun(account.username, SALT_FETCH_INTERVALS_MS, now());
     inFlight.add(row.match_id);
     try {
-        await fetchOne(account, row);
+        await fetchOne(account, row, run);
     } finally {
         inFlight.delete(row.match_id);
     }
-    return true;
+    return run.interval_ms;
 }
 
-async function fetchOne(account : SteamAccount, row : SaltRow) {
+async function fetchOne(account : SteamAccount, row : SaltRow, run : FetchRun) {
     let res;
     try {
         res = await getGcMatchSalts(account, row.match_id);
@@ -129,11 +144,13 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
         // Not connected means it never left, anything else may have counted against us
         if(!message(err).startsWith("Not connected")) {
             await recordFetch(now(), logUser(account));
+            await countRunRequest(run.id, now(), false);
             await retrySalt(row.match_id, backoff(row), message(err), MAX_ATTEMPTS);
         }
         return;
     }
     await recordFetch(now(), logUser(account));
+    await countRunRequest(run.id, now(), res.result == GcResult.Success);
 
     switch(res.result) {
         case GcResult.Success:
@@ -144,11 +161,13 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
                 await setSaltStatus(row.match_id, "failed", undefined, undefined, "GC returned no salts");
             }
             break;
-        case GcResult.RateLimited:
+        case GcResult.RateLimited: {
             // Same as deadlock-api-ingest: Steam's limit doesn't clear in hours, so the whole 24h allowance is spent
             await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, logUser(account));
-            error(`GC rate limited salt fetching on ${account.username}, nothing more from it for 24h`);
+            await endRun(run.id, now(), "rate_limited");
+            error(`GC rate limited salt fetching on ${account.username} after ${run.requests + 1} requests (${run.ok} ok) at ${run.interval_ms / 1000}s spacing, nothing more from it for 24h`);
             break;
+        }
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
             await setSaltStatus(row.match_id, "failed", undefined, undefined, `GC result ${res.result}`);
