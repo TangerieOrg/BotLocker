@@ -82,24 +82,43 @@ async function runChecks() {
 // Main's fetch log keeps the original key, the extras have their own
 const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
 
-// Each account gets at most one match per interval and a daily cap, the game coordinator is strict about salts
-async function runFetch() {
-    if(!SALT_UPLOAD) return;
+// Matches being fetched right now, so two accounts never take the same one
+const inFlight = new Set<number>();
 
-    const eligible : SteamAccount[] = [];
-    for(const account of getAccounts()) {
-        if(!account.isReady()) continue;
-
-        const fetches = await getFetchLog(now(), logUser(account));
-        if(fetches.length >= SALT_FETCH_DAILY_CAP) continue;
-        if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) continue;
-        eligible.push(account);
+// Like deadlock-api-ingest: each account works through its daily allowance in a burst, one request every
+// SALT_FETCH_INTERVAL_MS, until it's spent or Steam rate limits it (which spends the rest of it)
+async function fetchLoop(account : SteamAccount) {
+    while(true) {
+        try {
+            if(await fetchNext(account)) {
+                await sleep(SALT_FETCH_INTERVAL_MS);
+                continue;
+            }
+        } catch(err) {
+            error(`Salt fetch loop failed on ${account.username}`, err);
+        }
+        await sleep(TICK_MS);
     }
-    if(eligible.length == 0) return;
+}
 
-    // A different match for each account
-    const rows = await dueRows("missing", eligible.length);
-    await Promise.all(rows.map((row, i) => fetchOne(eligible[i], row)));
+// Whether a request went out
+async function fetchNext(account : SteamAccount) {
+    if(!SALT_UPLOAD || !account.isReady()) return false;
+
+    const fetches = await getFetchLog(now(), logUser(account));
+    if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
+    if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return false;
+
+    const row = (await dueRows("missing", inFlight.size + 1)).find(x => !inFlight.has(x.match_id));
+    if(!row) return false;
+
+    inFlight.add(row.match_id);
+    try {
+        await fetchOne(account, row);
+    } finally {
+        inFlight.delete(row.match_id);
+    }
+    return true;
 }
 
 async function fetchOne(account : SteamAccount, row : SaltRow) {
@@ -195,7 +214,6 @@ export function startSalts() {
         running = true;
         try {
             await runChecks();
-            await runFetch();
             await runUploads();
         } catch(err) {
             error("Salt run failed", err);
@@ -206,6 +224,10 @@ export function startSalts() {
 
     seed().catch(err => error("Couldn't queue stored matches", err));
     setInterval(() => seed().catch(err => error("Couldn't queue stored matches", err)), SEED_INTERVAL_MS);
+    // Accounts only exist once startSteam has run
+    setTimeout(() => {
+        for(const account of getAccounts()) fetchLoop(account).catch(err => error("Salt fetch loop died", err));
+    }, 10000);
     setTimeout(tick, 10000);
     setInterval(tick, TICK_MS);
 }
