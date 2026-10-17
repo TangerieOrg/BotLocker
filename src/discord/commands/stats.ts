@@ -1,8 +1,8 @@
 import { type APIEmbed, type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { getPlayerMatches, type Match } from "../../db/mod.ts";
+import { getPartnerStats, getPlayerMatches, type Match } from "../../db/mod.ts";
 import { heroIcon, heroList, heroName, rankName } from "../../deadlock/assets.ts";
 import { formatPlayed, kda, PERIODS, pct, record, streaks, sum } from "../../helpers/stats.ts";
-import { getAccount } from "../../links/LinkStore.ts";
+import { getAccount, getUser } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
 
 export const data = new SlashCommandBuilder()
@@ -39,7 +39,16 @@ async function topHeroes(rows : Match[]) {
     ));
 }
 
-async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean, heroFiltered : boolean) : Promise<APIEmbed> {
+async function partnerLines(interaction : ChatInputCommandInteraction, accountId : number, since : number, streetBrawl : boolean, heroId? : number) {
+    const partners = await getPartnerStats(accountId, since, streetBrawl, heroId);
+    return await Promise.all(partners.map(async x => {
+        const userId = getUser(x.account_id);
+        const member = userId ? await interaction.guild!.members.fetch(userId).catch(() => undefined) : undefined;
+        return `**${member?.displayName ?? "Unknown"}** - ${x.games} game${x.games == 1 ? "" : "s"} · ${x.wins}W - ${x.games - x.wins}L · ${pct(x.wins, x.games)} WR`;
+    }));
+}
+
+async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean, heroFiltered : boolean, partners : string[]) : Promise<APIEmbed> {
     const minutes = sum(rows, x => x.duration_s) / 60;
     const avg = (f : (x : Match) => number) => (sum(rows, f) / rows.length).toFixed(1);
     const { current, best } = streaks(rows);
@@ -72,6 +81,7 @@ async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean, 
     }
 
     if(!heroFiltered) fields.push({ name: "Top Heroes", value: (await topHeroes(rows)).join("\n") });
+    if(partners.length > 0) fields.push({ name: "Duo Partners", value: partners.join("\n") });
 
     // Rows are newest first, flipped so it reads oldest to newest like a form guide
     const form = rows.slice(0, 10).reverse().map(x => x.won ? "W" : "L").join("");
@@ -102,9 +112,11 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const period = PERIODS[interaction.options.getString("period") ?? "all"];
     const since = period.since();
-    const [standard, streetBrawl] = await Promise.all([
+    const [standard, streetBrawl, standardPartners, streetBrawlPartners] = await Promise.all([
         getPlayerMatches(accountId, since, false, hero?.id),
-        getPlayerMatches(accountId, since, true, hero?.id)
+        getPlayerMatches(accountId, since, true, hero?.id),
+        partnerLines(interaction, accountId, since, false, hero?.id),
+        partnerLines(interaction, accountId, since, true, hero?.id)
     ]);
 
     const member = await interaction.guild!.members.fetch(user.id).catch(() => undefined);
@@ -115,8 +127,8 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     }
 
     const embeds : APIEmbed[] = [];
-    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, !!hero));
-    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, !!hero));
+    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, !!hero, standardPartners));
+    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, !!hero, streetBrawlPartners));
 
     embeds[0].author = { name: `${name}'s ${hero ? `${hero.name} ` : ""}Stats`, icon_url: (member ?? user).displayAvatarURL() };
     const icon = hero ? await heroIcon(hero.id) : undefined;

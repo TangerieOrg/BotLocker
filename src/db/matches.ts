@@ -122,6 +122,19 @@ export const getPlayerMatches = asDbFunction((db, accountId : number, since : nu
     return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
 });
 
+// Linked teammates a player shares a team with most, with games and wins together. Same caveat as getDuoMatches
+export const getPartnerStats = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean, heroId? : number) => {
+    using stmt = db.prepare<{ account_id : number, games : number, wins : number }>(`--sql
+        SELECT b.account_id AS account_id, COUNT(*) AS games, SUM(a.won) AS wins FROM matches a
+        JOIN matches b ON b.match_id = a.match_id AND b.won = a.won AND b.account_id != a.account_id
+        WHERE a.account_id = ? AND a.start_time >= ? AND (a.game_mode = 4) = ? AND (? IS NULL OR a.hero_id = ?)
+        GROUP BY b.account_id
+        ORDER BY games DESC, wins DESC
+        LIMIT 5
+    `);
+    return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
+});
+
 // Games two accounts shared a team in (same match, same result), newest first. There's no party id stored,
 // so this can't tell a queued duo from two people who landed on the same team
 export const getDuoMatches = asDbFunction((db, accountA : number, accountB : number, since : number, streetBrawl : boolean) => {
