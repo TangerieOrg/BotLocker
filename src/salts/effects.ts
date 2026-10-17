@@ -1,5 +1,5 @@
 import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
-import { getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
+import { exhaustFetchLog, getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
@@ -21,14 +21,11 @@ const MAX_ATTEMPTS = 5;
 const RETRY_BASE_S = 10 * 60;
 const RETRY_MAX_S = 6 * 60 * 60;
 const API_PAUSE_S = 5 * 60;
-const GC_RATE_LIMIT_PAUSE_S = 6 * 60 * 60;
 // Matches that ended this recently count as live and go ahead of the backlog
 const LIVE_WINDOW_S = 6 * 60 * 60;
 
 export const saltState = {
     apiPausedUntil: 0,
-    // Per account, by username
-    gcPausedUntil: new Map<string, number>(),
     lastApiError: undefined as { at: number, message: string } | undefined,
     lastSeed: undefined as { at: number, added: number } | undefined
 };
@@ -91,7 +88,7 @@ async function runFetch() {
 
     const eligible : SteamAccount[] = [];
     for(const account of getAccounts()) {
-        if(!account.isReady() || now() < (saltState.gcPausedUntil.get(account.username) ?? 0)) continue;
+        if(!account.isReady()) continue;
 
         const fetches = await getFetchLog(now(), logUser(account));
         if(fetches.length >= SALT_FETCH_DAILY_CAP) continue;
@@ -129,8 +126,9 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
             }
             break;
         case GcResult.RateLimited:
-            saltState.gcPausedUntil.set(account.username, now() + GC_RATE_LIMIT_PAUSE_S);
-            error(`GC rate limited salt fetching on ${account.username}, pausing it for ${GC_RATE_LIMIT_PAUSE_S / 3600}h`);
+            // Same as deadlock-api-ingest: Steam's limit doesn't clear in hours, so the whole 24h allowance is spent
+            await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, logUser(account));
+            error(`GC rate limited salt fetching on ${account.username}, nothing more from it for 24h`);
             break;
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:

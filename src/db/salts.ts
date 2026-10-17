@@ -112,3 +112,8 @@ export async function getFetchLog(at : number, username? : string) {
 export async function recordFetch(at : number, username? : string) {
     await setKv(logKey(username), JSON.stringify([...await getFetchLog(at, username), at]));
 }
+
+// Steam rate limited the account, so its whole 24h allowance counts as spent from now
+export async function exhaustFetchLog(at : number, cap : number, username? : string) {
+    await setKv(logKey(username), JSON.stringify(Array<number>(cap).fill(at)));
+}

@@ -43,19 +43,17 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const budget = accounts.map((account, i) => {
         const fetches = logs[i];
         const parts = [`${account.username}: ${fetches.length}/${SALT_FETCH_DAILY_CAP}`];
-        if(fetches.length > 0) {
-            const last = Math.max(...fetches);
-            const nextSlot = fetches.length >= SALT_FETCH_DAILY_CAP ? Math.min(...fetches) + 24 * 60 * 60 : last + SALT_FETCH_INTERVAL_MS / 1000;
+        if(fetches.length >= SALT_FETCH_DAILY_CAP) {
+            parts.push(`allowance spent (or rate limited), waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
+        } else if(fetches.length > 0) {
+            const nextSlot = Math.max(...fetches) + SALT_FETCH_INTERVAL_MS / 1000;
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
         }
         return parts.join(", ");
     });
     budget.push("GC fetches in the last 24h, per account");
 
-    const gcServices = accounts.flatMap(x => [
-        `${x.username} GC connected: ${x.isReady() ? "yes" : "no"}`,
-        `${x.username} salt fetching: ${pause(saltState.gcPausedUntil.get(x.username) ?? 0)}`
-    ]);
+    const gcServices = accounts.map(x => `${x.username} GC connected: ${x.isReady() ? "yes" : "no"}`);
 
     const failures = summary.failures.length
         ? summary.failures.map(x => `\`${x.match_id}\` ${x.last_error ?? "unknown"} (${x.attempts} tries)`).join("\n")
