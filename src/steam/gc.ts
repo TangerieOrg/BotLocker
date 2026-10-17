@@ -1,6 +1,6 @@
 import protobuf from "protobufjs";
 import { SemaphoreQueue } from "@tangerie/utils/queue";
-import { gcJob } from "./client.ts";
+import { gcJob, type SteamAccount } from "./client.ts";
 import type { MatchHistoryEntry } from "../deadlock/types.ts";
 
 // Just what we use from citadel_gcmessages_client.proto (SteamDatabase/GameTracking-Deadlock), enums as plain ints
@@ -55,10 +55,18 @@ const MetaResponse = root.lookupType("GetMatchMetaDataResponse");
 const MIN_GAP_MS = 2000;
 const PAUSE_MS = 60 * 60 * 1000;
 
-// The game coordinator takes one request at a time anyway
+// The game coordinator takes one request at a time per account. History only ever runs on the main account
 const queue = new SemaphoreQueue(1);
 let pausedUntil = 0;
 let lastAt = 0;
+
+// Extra accounts get their own queue and spacing, the main account's is the one history uses
+const extras = new Map<string, { queue: SemaphoreQueue, lastAt: number }>();
+const extraFor = (username : string) => {
+    let x = extras.get(username);
+    if(!x) extras.set(username, x = { queue: new SemaphoreQueue(1), lastAt: 0 });
+    return x;
+};
 
 const sleep = (ms : number) => new Promise(res => setTimeout(res, ms));
 
@@ -113,19 +121,24 @@ export interface MatchSaltResult {
 }
 
 // Salts are limited far harder than history, the caller keeps its own budget and handles a non-success result.
-// Shares the queue and spacing with history but not its rate limit pause
-export const getGcMatchSalts = (matchId : number) => queue.run(async () : Promise<MatchSaltResult> => {
-    await sleep(Math.max(0, lastAt + MIN_GAP_MS - Date.now()));
-    lastAt = Date.now();
+// On the main account this shares the queue and spacing with history but not its rate limit pause
+export const getGcMatchSalts = (account : SteamAccount, matchId : number) => {
+    const extra = account.main ? undefined : extraFor(account.username);
+    return (extra?.queue ?? queue).run(async () : Promise<MatchSaltResult> => {
+        const last = extra?.lastAt ?? lastAt;
+        await sleep(Math.max(0, last + MIN_GAP_MS - Date.now()));
+        if(extra) extra.lastAt = Date.now();
+        else lastAt = Date.now();
 
-    const raw = await gcJob(METADATA_REQUEST, MetaRequest.encode(MetaRequest.create({ match_id: matchId })).finish());
-    const out = MetaResponse.toObject(MetaResponse.decode(raw), { longs: Number });
+        const raw = await account.gcJob(METADATA_REQUEST, MetaRequest.encode(MetaRequest.create({ match_id: matchId })).finish());
+        const out = MetaResponse.toObject(MetaResponse.decode(raw), { longs: Number });
 
-    return {
-        result: out.result ?? GcResult.InternalError,
-        // deadlock-api calls the replay group the cluster
-        cluster_id: out.replay_group_id ?? null,
-        metadata_salt: out.metadata_salt ?? null,
-        replay_salt: out.replay_salt ?? null
-    };
-});
+        return {
+            result: out.result ?? GcResult.InternalError,
+            // deadlock-api calls the replay group the cluster
+            cluster_id: out.replay_group_id ?? null,
+            metadata_salt: out.metadata_salt ?? null,
+            replay_salt: out.replay_salt ?? null
+        };
+    });
+};

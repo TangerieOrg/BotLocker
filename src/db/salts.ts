@@ -99,13 +99,16 @@ export const getSaltSummary = asDbFunction((db, at : number) : SaltSummary => {
 const FETCH_LOG_KEY = "salt_fetch_log";
 const DAY_S = 24 * 60 * 60;
 
+// Main keeps the original key so its log carries over, extra accounts each get their own
+const logKey = (username? : string) => username ? `${FETCH_LOG_KEY}:${username}` : FETCH_LOG_KEY;
+
 // When salt requests went to the game coordinator in the last 24h, kept so the limit holds across restarts
-export async function getFetchLog(at : number) {
-    const raw = await getKv(FETCH_LOG_KEY);
+export async function getFetchLog(at : number, username? : string) {
+    const raw = await getKv(logKey(username));
     const log = raw ? JSON.parse(raw) as number[] : [];
     return log.filter(x => x > at - DAY_S);
 }
 
-export async function recordFetch(at : number) {
-    await setKv(FETCH_LOG_KEY, JSON.stringify([...await getFetchLog(at), at]));
+export async function recordFetch(at : number, username? : string) {
+    await setKv(logKey(username), JSON.stringify([...await getFetchLog(at, username), at]));
 }

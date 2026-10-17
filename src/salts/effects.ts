@@ -3,6 +3,7 @@ import { getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow
 import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
+import { getAccounts, type SteamAccount } from "../steam/client.ts";
 import { GcResult, getGcMatchSalts } from "../steam/gc.ts";
 import { SteamStore } from "../steam/SteamStore.ts";
 
@@ -26,7 +27,8 @@ const LIVE_WINDOW_S = 6 * 60 * 60;
 
 export const saltState = {
     apiPausedUntil: 0,
-    gcPausedUntil: 0,
+    // Per account, by username
+    gcPausedUntil: new Map<string, number>(),
     lastApiError: undefined as { at: number, message: string } | undefined,
     lastSeed: undefined as { at: number, added: number } | undefined
 };
@@ -80,42 +82,55 @@ async function runChecks() {
     }
 }
 
-// At most one match per interval and a daily cap, the game coordinator is strict about salts
+// Main's fetch log keeps the original key, the extras have their own
+const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
+
+// Each account gets at most one match per interval and a daily cap, the game coordinator is strict about salts
 async function runFetch() {
-    if(!SALT_UPLOAD || !SteamStore.get().gcReady || now() < saltState.gcPausedUntil) return;
+    if(!SALT_UPLOAD) return;
 
-    const fetches = await getFetchLog(now());
-    if(fetches.length >= SALT_FETCH_DAILY_CAP) return;
-    if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return;
+    const eligible : SteamAccount[] = [];
+    for(const account of getAccounts()) {
+        if(!account.isReady() || now() < (saltState.gcPausedUntil.get(account.username) ?? 0)) continue;
 
-    const [row] = await dueRows("missing", 1);
-    if(!row) return;
+        const fetches = await getFetchLog(now(), logUser(account));
+        if(fetches.length >= SALT_FETCH_DAILY_CAP) continue;
+        if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) continue;
+        eligible.push(account);
+    }
+    if(eligible.length == 0) return;
 
+    // A different match for each account
+    const rows = await dueRows("missing", eligible.length);
+    await Promise.all(rows.map((row, i) => fetchOne(eligible[i], row)));
+}
+
+async function fetchOne(account : SteamAccount, row : SaltRow) {
     let res;
     try {
-        res = await getGcMatchSalts(row.match_id);
+        res = await getGcMatchSalts(account, row.match_id);
     } catch(err) {
         // Not connected means it never left, anything else may have counted against us
         if(!message(err).startsWith("Not connected")) {
-            await recordFetch(now());
+            await recordFetch(now(), logUser(account));
             await retrySalt(row.match_id, backoff(row), message(err), MAX_ATTEMPTS);
         }
         return;
     }
-    await recordFetch(now());
+    await recordFetch(now(), logUser(account));
 
     switch(res.result) {
         case GcResult.Success:
             if(hasSalt(res)) {
-                await setSaltStatus(row.match_id, "fetched", res, "gc");
-                log(`Got salts for ${row.match_id}`);
+                await setSaltStatus(row.match_id, "fetched", res, `gc:${account.selfId() ?? ""}`);
+                log(`Got salts for ${row.match_id} (${account.username})`);
             } else {
                 await setSaltStatus(row.match_id, "failed", undefined, undefined, "GC returned no salts");
             }
             break;
         case GcResult.RateLimited:
-            saltState.gcPausedUntil = now() + GC_RATE_LIMIT_PAUSE_S;
-            error(`GC rate limited salt fetching, pausing for ${GC_RATE_LIMIT_PAUSE_S / 3600}h`);
+            saltState.gcPausedUntil.set(account.username, now() + GC_RATE_LIMIT_PAUSE_S);
+            error(`GC rate limited salt fetching on ${account.username}, pausing it for ${GC_RATE_LIMIT_PAUSE_S / 3600}h`);
             break;
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
@@ -140,17 +155,17 @@ async function uploadOne(row : SaltRow, username : string) {
     }
 }
 
-async function runUploads() {
-    if(!SALT_UPLOAD || now() < saltState.apiPausedUntil) return;
+// Credited to whichever account fetched it, older rows only say "gc" and came from the main account
+const uploaderOf = (row : SaltRow) => {
+    const id = row.source?.startsWith("gc:") ? row.source.slice(3) : undefined;
+    return `botlocker:${id || (SteamStore.get().self ?? "unknown")}`;
+};
 
-    const rows = await dueRows("fetched", UPLOAD_BATCH);
-    if(rows.length == 0) return;
-
-    const username = `botlocker:${SteamStore.get().self ?? "unknown"}`;
+async function uploadGroup(rows : SaltRow[], username : string) {
     try {
         await uploadSalts(rows, username);
         for(const row of rows) await setSaltStatus(row.match_id, "uploaded");
-        log(`Uploaded salts for ${rows.length} matches`);
+        log(`Uploaded salts for ${rows.length} matches as ${username}`);
     } catch(err) {
         // One bad entry fails the whole request, so find which
         if(err instanceof ApiError && err.status == 400) {
@@ -159,6 +174,17 @@ async function runUploads() {
             apiFailed(err);
             for(const row of rows) await retrySalt(row.match_id, backoff(row), message(err), MAX_ATTEMPTS);
         }
+    }
+}
+
+async function runUploads() {
+    if(!SALT_UPLOAD || now() < saltState.apiPausedUntil) return;
+
+    const rows = await dueRows("fetched", UPLOAD_BATCH);
+    const groups = Map.groupBy(rows, uploaderOf);
+    for(const [username, group] of groups) {
+        if(now() < saltState.apiPausedUntil) return;
+        await uploadGroup(group, username);
     }
 }
 

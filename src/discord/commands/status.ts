@@ -3,7 +3,7 @@ import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../..
 import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
 import { saltState } from "../../salts/effects.ts";
-import { SteamStore } from "../../steam/SteamStore.ts";
+import { getAccounts } from "../../steam/client.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { isOwner } from "../util.ts";
 
@@ -31,17 +31,31 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     }
 
     const at = now();
-    const [summary, fetches] = await Promise.all([getSaltSummary(at), getFetchLog(at)]);
+    const accounts = getAccounts();
+    const [summary, logs] = await Promise.all([
+        getSaltSummary(at),
+        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username)))
+    ]);
 
     const total = Object.values(summary.counts).reduce((a, b) => a + b, 0);
     const counts = ORDER.map(([k, label]) => `${label}: **${summary.counts[k] ?? 0}**`).join("\n");
 
-    const budget = [`${fetches.length}/${SALT_FETCH_DAILY_CAP} GC fetches in the last 24h`];
-    if(fetches.length > 0) {
-        const last = Math.max(...fetches);
-        const nextSlot = fetches.length >= SALT_FETCH_DAILY_CAP ? Math.min(...fetches) + 24 * 60 * 60 : last + SALT_FETCH_INTERVAL_MS / 1000;
-        if(nextSlot > at) budget.push(`next slot ${when(nextSlot)}`);
-    }
+    const budget = accounts.map((account, i) => {
+        const fetches = logs[i];
+        const parts = [`${account.username}: ${fetches.length}/${SALT_FETCH_DAILY_CAP}`];
+        if(fetches.length > 0) {
+            const last = Math.max(...fetches);
+            const nextSlot = fetches.length >= SALT_FETCH_DAILY_CAP ? Math.min(...fetches) + 24 * 60 * 60 : last + SALT_FETCH_INTERVAL_MS / 1000;
+            if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
+        }
+        return parts.join(", ");
+    });
+    budget.push("GC fetches in the last 24h, per account");
+
+    const gcServices = accounts.flatMap(x => [
+        `${x.username} GC connected: ${x.isReady() ? "yes" : "no"}`,
+        `${x.username} salt fetching: ${pause(saltState.gcPausedUntil.get(x.username) ?? 0)}`
+    ]);
 
     const failures = summary.failures.length
         ? summary.failures.map(x => `\`${x.match_id}\` ${x.last_error ?? "unknown"} (${x.attempts} tries)`).join("\n")
@@ -61,13 +75,12 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             description: `${total} matches tracked\n${counts}`,
             fields: [
                 { name: "Queue", value: queue.join(", ") },
-                { name: "GC budget", value: budget.join(", ") },
+                { name: "GC budget", value: budget.join("\n") },
                 {
                     name: "Services",
                     value: [
                         `Uploading: ${SALT_UPLOAD ? "on" : "off (SALT_UPLOAD=0)"}`,
-                        `GC connected: ${SteamStore.get().gcReady ? "yes" : "no"}`,
-                        `GC salt fetching: ${pause(saltState.gcPausedUntil)}`,
+                        ...gcServices,
                         `deadlock-api: ${pause(saltState.apiPausedUntil)}`
                     ].join("\n")
                 },

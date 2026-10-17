@@ -1,6 +1,7 @@
 // @ts-types="@types/steam-user"
 import SteamUser from "steam-user";
 import { createStore } from "@tangerie/global-store/store";
+import { STEAM_USERS } from "../config.ts";
 import { toSteam64 } from "../helpers/steam.ts";
 
 export const Relationship = SteamUser.EFriendRelationship;
@@ -52,8 +53,17 @@ const matchMinutes = (status? : OnlineStatus) => {
 };
 
 
+// An extra, salt-only bot account. The main account's equivalents are the top-level login, self and gcReady
+export interface BotState {
+    login: Login;
+    self?: number;
+    gcReady: boolean;
+}
+
 interface SteamState {
     login: Login;
+    // Salt-only accounts after the first one in STEAM_USERS, by username
+    bots: Map<string, BotState>;
     // The bot's own account, for pointing people at its profile
     self?: number;
     // Connected to the Deadlock game coordinator, match history only works while this is set
@@ -80,6 +90,7 @@ interface SteamState {
 export const SteamStore = createStore({
     state: {
         login: { state: "loggedOut" },
+        bots: new Map(),
         gcReady: false,
         limited: false,
         relations: new Map(),
@@ -96,6 +107,9 @@ export const SteamStore = createStore({
         setSelf: (s, id : number) => { s.self = id },
         setGcReady: (s, ready : boolean) => { s.gcReady = ready },
         setLimited: (s) => { s.limited = true },
+        setBot: (s, username : string, patch : Partial<BotState>) => {
+            s.bots = new Map(s.bots).set(username, { login: { state: "loggedOut" }, gcReady: false, ...s.bots.get(username), ...patch });
+        },
         setRelations: (s, relations : [number, SteamUser.EFriendRelationship][]) => {
             s.relations = new Map(relations);
             s.relationsLoaded = true;
@@ -136,7 +150,7 @@ export const SteamStore = createStore({
 });
 
 export const {
-    setLogin, setSelf, setGcReady, setLimited, setRelations, setRelation, setOnline, setGame, setPersona
+    setLogin, setSelf, setGcReady, setLimited, setBot, setRelations, setRelation, setOnline, setGame, setPersona
 } = SteamStore.actions;
 
 export const isFriend = SteamStore.selector((s, id : number) => s.relations.get(id) == Relationship.Friend);
@@ -150,3 +164,17 @@ export const gameName = SteamStore.selector((s, status : OnlineStatus) =>
 export const partyOf = SteamStore.selector((s, id : number) => s.parties.get(id));
 
 export const botProfileUrl = SteamStore.selector(s => s.self ? `https://steamcommunity.com/profiles/${toSteam64(s.self)}` : undefined);
+
+// The login of the main account or one of the extras, by username
+export const loginOf = (s : SteamState, username : string) : Login | undefined =>
+    username == STEAM_USERS[0]?.username ? s.login : s.bots.get(username)?.login;
+
+// Every account that's waiting on a Steam Guard code, main first
+export const guardWaiting = SteamStore.selector(s => {
+    const out : { username: string, login: Extract<Login, { state: "guard" }> }[] = [];
+    for(const { username } of STEAM_USERS) {
+        const login = loginOf(s, username);
+        if(login?.state == "guard") out.push({ username, login });
+    }
+    return out;
+});

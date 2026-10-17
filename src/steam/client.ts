@@ -2,7 +2,7 @@
 import SteamUser from "steam-user";
 import SteamID from "steamid";
 import { Buffer } from "node:buffer";
-import { DATA_DIR, STEAM_BOT_PASSWORD, STEAM_BOT_USERNAME } from "../config.ts";
+import { DATA_DIR, STEAM_USERS } from "../config.ts";
 import { getKv, setKv } from "../db/mod.ts";
 import { readLine } from "../helpers/cli.ts";
 import { logger } from "../helpers/log.ts";
@@ -12,7 +12,7 @@ import { activityFromStatus, modeLabel } from "./activity.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, gameName, type OnlineStatus, type Persona, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, gameName, type Login, type OnlineStatus, type Persona, setBot, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -21,130 +21,211 @@ const JOB_TIMEOUT_MS = 15000;
 const TOKEN_KEY = "steam_refresh_token";
 const RELOGIN_MS = 5 * 60 * 1000;
 const RICH_PRESENCE_POLL_MS = 30 * 1000;
+// Spread the extra accounts out so Steam doesn't throttle a burst of logins
+const EXTRA_LOGIN_GAP_MS = 5000;
 
 const { log, error } = logger("Steam");
 
 const accountOf = (steamId : SteamID | string) => (typeof steamId == "string" ? new SteamID(steamId) : steamId).accountid;
 
-const client = new SteamUser({
-    webCompatibilityMode: true,
-    renewRefreshTokens: true,
-    autoRelogin: true,
-    dataDirectory: `${DATA_DIR}/steam`
-});
-
-async function logOn() {
-    const refreshToken = await getKv(TOKEN_KEY);
-    setLogin({ state: "loggingIn", token: !!refreshToken });
-    client.logOn(refreshToken ?
-        { refreshToken } :
-        { accountName: STEAM_BOT_USERNAME!, password: STEAM_BOT_PASSWORD! });
+export interface SteamAccount {
+    username: string;
+    // The first account in STEAM_USERS, the only one with friends. The rest just fetch salts
+    main: boolean;
+    isReady(): boolean;
+    selfId(): number | undefined;
+    gcJob(type : number, payload : Uint8Array): Promise<Uint8Array>;
 }
 
-client.on("loggedOn", () => {
-    log(`Logged in as ${STEAM_BOT_USERNAME}`);
-    setSelf(client.steamID!.accountid);
-    setLogin({ state: "loggedOn" });
-    client.setPersona(SteamUser.EPersonaState.Online);
-});
+const accounts : SteamAccount[] = [];
+let mainClient : SteamUser | undefined;
+// One account at a time can ask for a code in the terminal, the rest wait for /steamguard
+let terminalBusy = false;
 
-// Only asked for on a password login from somewhere new, the saved token skips it after that
-client.on("steamGuard", async (domain, callback, lastCodeWrong) => {
-    const where = domain ? `emailed to ${domain}` : "from the Steam mobile app";
+// Main first
+export const getAccounts = () : readonly SteamAccount[] => accounts;
 
-    // Running in a terminal, just type it in
-    if(Deno.stdin.isTerminal()) {
-        log(`Steam Guard code ${lastCodeWrong ? "was wrong, enter a new one" : "needed"} (${where}):`);
-        const code = await readLine();
-        if(code) return callback(code);
+function createAccount(creds : { username : string, password : string }, main : boolean) {
+    const { username, password } = creds;
+    const tag = main ? username : `${username} (salts only)`;
+    const tokenKey = main ? TOKEN_KEY : `${TOKEN_KEY}:${username}`;
+    const loggedOut : Login = { state: "loggedOut" };
+
+    const client = new SteamUser({
+        webCompatibilityMode: true,
+        renewRefreshTokens: true,
+        autoRelogin: true,
+        dataDirectory: `${DATA_DIR}/steam`
+    });
+
+    const loginOf = (s = SteamStore.get()) => main ? s.login : s.bots.get(username)?.login ?? loggedOut;
+    const readyOf = (s = SteamStore.get()) => main ? s.gcReady : s.bots.get(username)?.gcReady ?? false;
+    const setLoginState = (login : Login) => main ? setLogin(login) : setBot(username, { login });
+    const setReady = (gcReady : boolean) => main ? setGcReady(gcReady) : setBot(username, { gcReady });
+    const setSelfId = (id : number) => main ? setSelf(id) : setBot(username, { self: id });
+
+    async function logOn() {
+        const refreshToken = await getKv(tokenKey);
+        setLoginState({ state: "loggingIn", token: !!refreshToken });
+        client.logOn(refreshToken ? { refreshToken } : { accountName: username, password });
     }
 
-    // Otherwise hold the login until the owner sends it with /steamguard
-    log(`Steam Guard code ${lastCodeWrong ? "was wrong" : "needed"} (${where}), waiting for /steamguard`);
-    setLogin({
-        state: "guard",
-        where,
-        lastCodeWrong,
-        submit: code => {
-            setLogin({ state: "loggingIn", token: false });
-            callback(code.trim().toUpperCase());
+    client.on("loggedOn", () => {
+        log(`Logged in as ${tag}`);
+        setSelfId(client.steamID!.accountid);
+        setLoginState({ state: "loggedOn" });
+        client.setPersona(SteamUser.EPersonaState.Online);
+    });
+
+    // Only asked for on a password login from somewhere new, the saved token skips it after that
+    client.on("steamGuard", async (domain, callback, lastCodeWrong) => {
+        const where = domain ? `emailed to ${domain}` : "from the Steam mobile app";
+
+        // Running in a terminal, just type it in
+        if(Deno.stdin.isTerminal() && !terminalBusy) {
+            terminalBusy = true;
+            log(`Steam Guard code ${lastCodeWrong ? "was wrong, enter a new one" : "needed"} for ${tag} (${where}):`);
+            const code = await readLine().finally(() => { terminalBusy = false });
+            if(code) return callback(code);
+        }
+
+        // Otherwise hold the login until the owner sends it with /steamguard
+        log(`Steam Guard code ${lastCodeWrong ? "was wrong" : "needed"} for ${tag} (${where}), waiting for /steamguard`);
+        setLoginState({
+            state: "guard",
+            where,
+            lastCodeWrong,
+            submit: code => {
+                setLoginState({ state: "loggingIn", token: false });
+                callback(code.trim().toUpperCase());
+            }
+        });
+    });
+
+    client.on("refreshToken", token => {
+        setKv(tokenKey, token).catch(err => error(`Couldn't save refresh token for ${tag}`, err));
+    });
+
+    client.on("receivedFromGC", (appid, type) => {
+        if(appid != DEADLOCK_APP_ID || type != GC_WELCOME) return;
+        if(!readyOf()) log(`${tag} connected to the Deadlock game coordinator`);
+        setReady(true);
+    });
+
+    client.on("playingState", blocked => {
+        if(!blocked) return;
+        error(`Someone else is playing on ${tag}, game coordinator is unavailable`);
+        setReady(false);
+    });
+
+    client.on("disconnected", (_result, msg) => {
+        log(`${tag} disconnected (${msg}), will reconnect`);
+        setReady(false);
+        setLoginState(loggedOut);
+    });
+
+    // Only fired when steam-user gives up, e.g. a bad login or the account being used elsewhere
+    client.on("error", async err => {
+        const login = loginOf();
+        const usedToken = login.state == "loggingIn" && login.token;
+        setReady(false);
+
+        const badLogin = [SteamUser.EResult.InvalidPassword, SteamUser.EResult.AccessDenied, SteamUser.EResult.Expired].includes(err.eresult);
+        if(badLogin && usedToken) {
+            error(`Saved login token for ${tag} was rejected (${err.message}), logging in with the password`);
+            await setKv(tokenKey, null);
+            logOn();
+        } else if(badLogin) {
+            error(`Login failed for ${tag} (${err.message}), check STEAM_USERS. ${main ? "Match tracking" : "Salt fetching on it"} is off until restart`);
+            setLoginState({ state: "failed" });
+        } else {
+            error(`${tag}: ${err.message}, retrying in ${RELOGIN_MS / 60000}m`);
+            setLoginState(loggedOut);
+            setTimeout(logOn, RELOGIN_MS);
         }
     });
-});
 
-client.on("refreshToken", token => {
-    setKv(TOKEN_KEY, token).catch(err => error("Couldn't save refresh token", err));
-});
+    // Keep saying hello until the game coordinator answers, and again whenever it's lost
+    let helloTimer : ReturnType<typeof setInterval> | undefined;
+    watch(SteamStore, s => loginOf(s).state == "loggedOn" && !readyOf(s), needed => {
+        clearInterval(helloTimer);
+        if(!needed) return;
 
-client.on("receivedFromGC", (appid, type) => {
-    if(appid != DEADLOCK_APP_ID || type != GC_WELCOME) return;
-    if(!SteamStore.get().gcReady) log("Connected to the Deadlock game coordinator");
-    setGcReady(true);
-});
+        const hello = () => client.sendToGC(DEADLOCK_APP_ID, GC_HELLO, {}, Buffer.alloc(0));
+        client.gamesPlayed([DEADLOCK_APP_ID]);
+        hello();
+        helloTimer = setInterval(hello, HELLO_INTERVAL_MS);
+    });
 
-client.on("playingState", blocked => {
-    if(!blocked) return;
-    error("Someone else is playing on the bot account, game coordinator is unavailable");
-    setGcReady(false);
-});
+    // Session dropped or a job went unanswered, the hello loop starts over
+    const gcJob = (type : number, payload : Uint8Array) : Promise<Uint8Array> => new Promise((resolve, reject) => {
+        if(!readyOf()) return reject(new Error("Not connected to the game coordinator"));
 
-client.on("disconnected", (_result, msg) => {
-    log(`Disconnected (${msg}), will reconnect`);
-    setGcReady(false);
-    setLogin({ state: "loggedOut" });
-});
+        const timer = setTimeout(() => {
+            log(`Lost the game coordinator on ${tag}, reconnecting`);
+            setReady(false);
+            reject(new Error(`Game coordinator didn't answer message ${type}`));
+        }, JOB_TIMEOUT_MS);
 
-// Only fired when steam-user gives up, e.g. a bad login or the account being used elsewhere
-client.on("error", async err => {
-    const usedToken = SteamStore.select(s => s.login.state == "loggingIn" && s.login.token);
-    setGcReady(false);
+        client.sendToGC(DEADLOCK_APP_ID, type, {}, Buffer.from(payload), (_appid, _type, body) => {
+            clearTimeout(timer);
+            resolve(new Uint8Array(body));
+        });
+    });
 
-    const badLogin = [SteamUser.EResult.InvalidPassword, SteamUser.EResult.AccessDenied, SteamUser.EResult.Expired].includes(err.eresult);
-    if(badLogin && usedToken) {
-        error(`Saved login token was rejected (${err.message}), logging in with the password`);
-        await setKv(TOKEN_KEY, null);
-        logOn();
-    } else if(badLogin) {
-        error(`Login failed (${err.message}), check STEAM_BOT_USERNAME/STEAM_BOT_PASSWORD. Match tracking is off until restart`);
-        setLogin({ state: "failed" });
-    } else {
-        error(`${err.message}, retrying in ${RELOGIN_MS / 60000}m`);
-        setLogin({ state: "loggedOut" });
-        setTimeout(logOn, RELOGIN_MS);
+    const account : SteamAccount = {
+        username,
+        main,
+        isReady: () => readyOf(),
+        selfId: () => main ? SteamStore.get().self : SteamStore.get().bots.get(username)?.self,
+        gcJob
+    };
+    accounts.push(account);
+    if(main) {
+        mainClient = client;
+        registerMainHandlers(client);
     }
-});
 
-client.on("friendsList", () => {
-    setRelations(Object.entries(client.myFriends).map(([sid, rel]) => [accountOf(sid), rel]));
-});
+    return { account, logOn };
+}
 
-client.on("friendRelationship", (sid, rel) => {
-    if(rel == SteamUser.EFriendRelationship.Friend) log(`Now friends with ${sid.accountid}`);
-    setRelation(sid.accountid, rel);
-});
+// Friends, presence and personas only exist on the main account
+function registerMainHandlers(client : SteamUser) {
+    client.on("friendsList", () => {
+        setRelations(Object.entries(client.myFriends).map(([sid, rel]) => [accountOf(sid), rel]));
+    });
 
-// Updates often only carry what changed, anything missing falls back to what we already knew
-client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
-    const id = accountOf(sid);
-    const known : Partial<SteamPersona> = client.users[sid.getSteamID64()] ?? {};
-    const field = <K extends keyof SteamPersona>(k : K) => update[k] ?? known[k];
+    client.on("friendRelationship", (sid, rel) => {
+        if(rel == SteamUser.EFriendRelationship.Friend) log(`Now friends with ${sid.accountid}`);
+        setRelation(sid.accountid, rel);
+    });
 
-    // Steam games come through as an app id, non-Steam ones as a huge gameid with just a name
-    const state = field("persona_state");
-    const gameId = Number(field("gameid") ?? 0);
-    const appId = field("game_played_app_id") || (gameId < 2 ** 32 ? gameId : 0);
-    const online = state != null && state != 0;
+    // Updates often only carry what changed, anything missing falls back to what we already knew
+    client.on("user", (sid : SteamID, update : Partial<SteamPersona>) => {
+        const id = accountOf(sid);
+        const known : Partial<SteamPersona> = client.users[sid.getSteamID64()] ?? {};
+        const field = <K extends keyof SteamPersona>(k : K) => update[k] ?? known[k];
 
-    // Pushed rich presence is often empty even mid-game, so that keeps whatever the poll last saw
-    const last = SteamStore.get().online.get(id);
-    const pushed = update.rich_presence?.length ? Object.fromEntries(update.rich_presence.map(x => [x.key, String(x.value)])) : undefined;
-    const rich = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.rich : undefined);
+        // Steam games come through as an app id, non-Steam ones as a huge gameid with just a name
+        const state = field("persona_state");
+        const gameId = Number(field("gameid") ?? 0);
+        const appId = field("game_played_app_id") || (gameId < 2 ** 32 ? gameId : 0);
+        const online = state != null && state != 0;
 
-    updateStatus(id, online ? { appId, game: field("game_name") || undefined, display: rich?.steam_display, rich } : undefined);
+        // Pushed rich presence is often empty even mid-game, so that keeps whatever the poll last saw
+        const last = SteamStore.get().online.get(id);
+        const pushed = update.rich_presence?.length ? Object.fromEntries(update.rich_presence.map(x => [x.key, String(x.value)])) : undefined;
+        const rich = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.rich : undefined);
 
-    const name = field("player_name");
-    if(name) setPersona(id, { name, avatar: field("avatar_url_full") });
-});
+        updateStatus(id, online ? { appId, game: field("game_name") || undefined, display: rich?.steam_display, rich } : undefined);
+
+        const name = field("player_name");
+        if(name) setPersona(id, { name, avatar: field("avatar_url_full") });
+    });
+
+    watchGames(client);
+    setInterval(() => pollRichPresence(client).catch(err => error("Couldn't get rich presence", err)), RICH_PRESENCE_POLL_MS);
+}
 
 const gameLabel = (status? : OnlineStatus) => !status ? undefined : status.appId == DEADLOCK_APP_ID ? "Deadlock" : gameName(status);
 
@@ -207,7 +288,7 @@ function updateStatus(id : number, status? : OnlineStatus) {
 }
 
 // Steam doesn't reliably push friends' rich presence, so ask for it while they're in Deadlock
-async function pollRichPresence() {
+async function pollRichPresence(client : SteamUser) {
     const { login, online } = SteamStore.get();
     const ids = [...online].filter(([, x]) => x.appId == DEADLOCK_APP_ID).map(([id]) => id);
     if(login.state != "loggedOn" || ids.length == 0) return;
@@ -226,29 +307,13 @@ async function pollRichPresence() {
     }
 }
 
-// Session dropped or a job went unanswered, the hello loop starts over
-export function gcJob(type : number, payload : Uint8Array) : Promise<Uint8Array> {
-    return new Promise((resolve, reject) => {
-        if(!SteamStore.get().gcReady) return reject(new Error("Not connected to the game coordinator"));
-
-        const timer = setTimeout(() => {
-            log("Lost the game coordinator, reconnecting");
-            setGcReady(false);
-            reject(new Error(`Game coordinator didn't answer message ${type}`));
-        }, JOB_TIMEOUT_MS);
-
-        client.sendToGC(DEADLOCK_APP_ID, type, {}, Buffer.from(payload), (_appid, _type, body) => {
-            clearTimeout(timer);
-            resolve(new Uint8Array(body));
-        });
-    });
-}
+export const gcJob = (type : number, payload : Uint8Array) => accounts[0].gcJob(type, payload);
 
 // Sends a request, or accepts one if they've already added the bot
 export async function addFriend(accountId : number) {
     const rel = SteamStore.get().relations.get(accountId);
     try {
-        const res = await client.addFriend(toSteam64(accountId));
+        const res = await mainClient!.addFriend(toSteam64(accountId));
         log(`${rel == SteamUser.EFriendRelationship.RequestRecipient ? "Accepted friend request from" : "Sent a friend request to"} ${res.personaName}`);
     } catch(err) {
         if((err as { eresult?: number }).eresult == SteamUser.EResult.InsufficientPrivilege) {
@@ -264,7 +329,7 @@ export async function fetchPersona(accountId : number) : Promise<Persona | undef
     const known = SteamStore.get().personas.get(accountId);
     if(known) return known;
 
-    const res = await client.getPersonas([toSteam64(accountId)]).catch(() => undefined);
+    const res = await mainClient!.getPersonas([toSteam64(accountId)]).catch(() => undefined);
     const p = Object.values(res?.personas ?? {}).at(0) as Partial<SteamPersona> | undefined;
     if(!p?.player_name) return undefined;
 
@@ -274,7 +339,8 @@ export async function fetchPersona(accountId : number) : Promise<Persona | undef
 }
 
 // Names for whatever friends are playing, looked up once per game
-function watchGames() {
+// Names for whatever friends are playing, looked up once per game
+function watchGames(client : SteamUser) {
     const requested = new Set<number>();
     watch(SteamStore, s => s.online, online => {
         const missing = [...new Set([...online.values()].map(x => x.appId))]
@@ -293,25 +359,14 @@ function watchGames() {
 }
 
 export function startSteam() {
-    if(!STEAM_BOT_USERNAME || !STEAM_BOT_PASSWORD) {
-        error("No STEAM_BOT_USERNAME/STEAM_BOT_PASSWORD, nothing can be tracked without the Steam bot");
+    if(STEAM_USERS.length == 0) {
+        error("No STEAM_USERS (username|password,...), nothing can be tracked without the Steam bot");
         Deno.exit(1);
     }
 
-    // Keep saying hello until the game coordinator answers, and again whenever it's lost
-    let helloTimer : ReturnType<typeof setInterval> | undefined;
-    watch(SteamStore, s => s.login.state == "loggedOn" && !s.gcReady, needed => {
-        clearInterval(helloTimer);
-        if(!needed) return;
-
-        const hello = () => client.sendToGC(DEADLOCK_APP_ID, GC_HELLO, {}, Buffer.alloc(0));
-        client.gamesPlayed([DEADLOCK_APP_ID]);
-        hello();
-        helloTimer = setInterval(hello, HELLO_INTERVAL_MS);
+    STEAM_USERS.forEach((creds, i) => {
+        const { logOn } = createAccount(creds, i == 0);
+        if(i == 0) logOn();
+        else setTimeout(logOn, i * EXTRA_LOGIN_GAP_MS);
     });
-
-    watchGames();
-    setInterval(() => pollRichPresence().catch(err => error("Couldn't get rich presence", err)), RICH_PRESENCE_POLL_MS);
-
-    logOn();
 }
