@@ -112,12 +112,27 @@ export const getMatchRows = asDbFunction((db, matchId : number) => {
     return stmt.all(matchId);
 });
 
-// One player's games in a mode since the given time, newest first
-export const getPlayerMatches = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean) => {
+// One player's games in a mode since the given time, newest first. Optionally just one hero
+export const getPlayerMatches = asDbFunction((db, accountId : number, since : number, streetBrawl : boolean, heroId? : number) => {
     using stmt = db.prepare<Match>(`--sql
         SELECT * FROM matches
-        WHERE account_id = ? AND start_time >= ? AND (game_mode = 4) = ?
+        WHERE account_id = ? AND start_time >= ? AND (game_mode = 4) = ? AND (? IS NULL OR hero_id = ?)
         ORDER BY match_id DESC
     `);
-    return stmt.all(accountId, since, Number(streetBrawl));
+    return stmt.all(accountId, since, Number(streetBrawl), heroId ?? null, heroId ?? null);
+});
+
+// Games two accounts shared a team in (same match, same result), newest first. There's no party id stored,
+// so this can't tell a queued duo from two people who landed on the same team
+export const getDuoMatches = asDbFunction((db, accountA : number, accountB : number, since : number, streetBrawl : boolean) => {
+    using stmt = db.prepare<Match>(`--sql
+        SELECT a.* FROM matches a
+        JOIN matches b ON b.match_id = a.match_id AND b.won = a.won
+        WHERE a.account_id = ? AND b.account_id = ? AND a.start_time >= ? AND (a.game_mode = 4) = ?
+        ORDER BY a.match_id DESC
+    `);
+    const mode = Number(streetBrawl);
+    const a = stmt.all(accountA, accountB, since, mode);
+    const b = stmt.all(accountB, accountA, since, mode);
+    return a.map((x, i) => ({ a: x, b: b[i] }));
 });

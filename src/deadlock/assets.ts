@@ -27,6 +27,8 @@ async function cached<T>(path : string) : Promise<T[]> {
 const heroes = () => cached<Hero>("/heroes");
 const ranks = () => cached<Rank>("/ranks");
 
+export const heroList = async () => [...await heroes()].sort((a, b) => a.name.localeCompare(b.name));
+
 const hero = async (id : number) => (await heroes()).find(x => x.id == id);
 
 export const heroName = async (id : number) => (await hero(id))?.name ?? `Hero ${id}`;

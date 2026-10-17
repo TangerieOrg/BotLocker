@@ -1,18 +1,9 @@
-import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
+import { type APIEmbed, type AutocompleteInteraction, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { getPlayerMatches, type Match } from "../../db/mod.ts";
-import { heroName, rankName } from "../../deadlock/assets.ts";
-import { now } from "../../helpers/now.ts";
+import { heroIcon, heroList, heroName, rankName } from "../../deadlock/assets.ts";
+import { formatPlayed, kda, PERIODS, pct, record, streaks, sum } from "../../helpers/stats.ts";
 import { getAccount } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
-
-const DAY = 24 * 60 * 60;
-
-const PERIODS : Record<string, { name: string, label: string, since: () => number }> = {
-    all: { name: "All time", label: "All stored games", since: () => 0 },
-    day: { name: "Last 24 hours", label: "Last 24 hours", since: () => now() - DAY },
-    week: { name: "Last 7 days", label: "Last 7 days", since: () => now() - 7 * DAY },
-    month: { name: "Last 30 days", label: "Last 30 days", since: () => now() - 30 * DAY }
-};
 
 export const data = new SlashCommandBuilder()
     .setName("stats")
@@ -23,36 +14,20 @@ export const data = new SlashCommandBuilder()
         .setName("period")
         .setDescription("How far back to count (default all time)")
         .addChoices(Object.entries(PERIODS).map(([value, x]) => ({ name: x.name, value })))
+    )
+    .addStringOption(x => x
+        .setName("hero")
+        .setDescription("Only count games on this hero (default all heroes)")
+        .setAutocomplete(true)
     );
 
-const sum = (rows : Match[], f : (x : Match) => number) => rows.reduce((n, x) => n + f(x), 0);
-
-const kda = (rows : Match[]) => (sum(rows, x => x.kills) + sum(rows, x => x.assists)) / Math.max(sum(rows, x => x.deaths), 1);
-
-const pct = (n : number, of : number) => `${Math.round(n / of * 100)}%`;
-
-function record(rows : Match[]) {
-    const wins = sum(rows, x => x.won);
-    return `${wins}W - ${rows.length - wins}L (${pct(wins, rows.length)})`;
-}
-
-function formatPlayed(s : number) {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor(s % 3600 / 60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-// Rows come newest first, so the current streak is the run at the front
-function streaks(rows : Match[]) {
-    let current = 0;
-    while(current < rows.length && rows[current].won == rows[0].won) current++;
-
-    let best = 0, run = 0;
-    for(const x of rows) {
-        run = x.won ? run + 1 : 0;
-        best = Math.max(best, run);
-    }
-    return { current: rows[0]?.won ? current : -current, best };
+export async function autocomplete(interaction : AutocompleteInteraction) {
+    const query = interaction.options.getFocused().trim().toLowerCase();
+    const options = (await heroList())
+        .filter(x => x.name.toLowerCase().includes(query))
+        .slice(0, 25)
+        .map(x => ({ name: x.name, value: x.id.toString() }));
+    await interaction.respond(options);
 }
 
 async function topHeroes(rows : Match[]) {
@@ -64,7 +39,7 @@ async function topHeroes(rows : Match[]) {
     ));
 }
 
-async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean) : Promise<APIEmbed> {
+async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean, heroFiltered : boolean) : Promise<APIEmbed> {
     const minutes = sum(rows, x => x.duration_s) / 60;
     const avg = (f : (x : Match) => number) => (sum(rows, f) / rows.length).toFixed(1);
     const { current, best } = streaks(rows);
@@ -96,7 +71,7 @@ async function modeEmbed(title : string, rows : Match[], streetBrawl : boolean) 
         }
     }
 
-    fields.push({ name: "Top Heroes", value: (await topHeroes(rows)).join("\n") });
+    if(!heroFiltered) fields.push({ name: "Top Heroes", value: (await topHeroes(rows)).join("\n") });
 
     // Rows are newest first, flipped so it reads oldest to newest like a form guide
     const form = rows.slice(0, 10).reverse().map(x => x.won ? "W" : "L").join("");
@@ -119,25 +94,33 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     await interaction.deferReply();
 
+    const heroInput = interaction.options.getString("hero");
+    const hero = heroInput == null ? undefined : (await heroList()).find(x => x.id.toString() == heroInput || x.name.toLowerCase() == heroInput.toLowerCase());
+    if(heroInput != null && !hero) {
+        return await interaction.editReply({ embeds: [errorEmbed("Unknown Hero", "Pick a hero from the list as you type")] });
+    }
+
     const period = PERIODS[interaction.options.getString("period") ?? "all"];
     const since = period.since();
     const [standard, streetBrawl] = await Promise.all([
-        getPlayerMatches(accountId, since, false),
-        getPlayerMatches(accountId, since, true)
+        getPlayerMatches(accountId, since, false, hero?.id),
+        getPlayerMatches(accountId, since, true, hero?.id)
     ]);
 
     const member = await interaction.guild!.members.fetch(user.id).catch(() => undefined);
     const name = member?.displayName ?? user.displayName;
 
     if(standard.length == 0 && streetBrawl.length == 0) {
-        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", `Nothing stored for ${name} (${period.label.toLowerCase()})`)] });
+        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", `Nothing stored for ${name}${hero ? ` on ${hero.name}` : ""} (${period.label.toLowerCase()})`)] });
     }
 
     const embeds : APIEmbed[] = [];
-    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false));
-    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true));
+    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, !!hero));
+    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, !!hero));
 
-    embeds[0].author = { name: `${name}'s Stats`, icon_url: (member ?? user).displayAvatarURL() };
+    embeds[0].author = { name: `${name}'s ${hero ? `${hero.name} ` : ""}Stats`, icon_url: (member ?? user).displayAvatarURL() };
+    const icon = hero ? await heroIcon(hero.id) : undefined;
+    if(icon) embeds[0].thumbnail = { url: icon };
     embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games` };
     if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
 
