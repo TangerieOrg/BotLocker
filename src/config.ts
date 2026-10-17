@@ -37,6 +37,6 @@ export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;
 export const SALT_UPLOAD = getBool("SALT_UPLOAD") ?? true;
 // Wait this long after a match ends so deadlock-api's own ingest gets there first, the game coordinator's salt limit is tight
 export const SALT_DELAY_S = (getNumber("SALT_DELAY_MS") ?? 30 * 60 * 1000) / 1000;
-// Same cadence as deadlock-api-ingest, a faster one trips Steam's per-account limit sooner
-export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 20 * 1000;
+// A faster cadence trips Steam's per-account limit sooner
+export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 30 * 60 * 1000;
 export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 40;
