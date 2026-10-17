@@ -4,6 +4,7 @@ import { heroIcon, heroList, heroName, rankName } from "../../deadlock/assets.ts
 import { formatPlayed, kda, PERIODS, pct, record, streaks, sum, topByWinRate } from "../../helpers/stats.ts";
 import { getAccount, getUser } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
+import { interactive, periodRow, type View } from "../interactive.ts";
 
 export const data = new SlashCommandBuilder()
     .setName("stats")
@@ -110,31 +111,38 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         return await interaction.editReply({ embeds: [errorEmbed("Unknown Hero", "Pick a hero from the list as you type")] });
     }
 
-    const period = PERIODS[interaction.options.getString("period") ?? "all"];
-    const since = period.since();
-    const [standard, streetBrawl, standardPartners, streetBrawlPartners] = await Promise.all([
-        getPlayerMatches(accountId, since, false, hero?.id),
-        getPlayerMatches(accountId, since, true, hero?.id),
-        partnerLines(interaction, accountId, since, false, hero?.id),
-        partnerLines(interaction, accountId, since, true, hero?.id)
-    ]);
-
     const member = await interaction.guild!.members.fetch(user.id).catch(() => undefined);
     const name = member?.displayName ?? user.displayName;
-
-    if(standard.length == 0 && streetBrawl.length == 0) {
-        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", `Nothing stored for ${name}${hero ? ` on ${hero.name}` : ""} (${period.label.toLowerCase()})`)] });
-    }
-
-    const embeds : APIEmbed[] = [];
-    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, !!hero, standardPartners));
-    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, !!hero, streetBrawlPartners));
-
-    embeds[0].author = { name: `${name}'s ${hero ? `${hero.name} ` : ""}Stats`, icon_url: (member ?? user).displayAvatarURL() };
     const icon = hero ? await heroIcon(hero.id) : undefined;
-    if(icon) embeds[0].thumbnail = { url: icon };
-    embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games` };
-    if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
 
-    await interaction.editReply({ embeds });
+    const render = async ({ period : key } : { period : string }) : Promise<View> => {
+        const period = PERIODS[key];
+        const since = period.since();
+        const [standard, streetBrawl, standardPartners, streetBrawlPartners] = await Promise.all([
+            getPlayerMatches(accountId, since, false, hero?.id),
+            getPlayerMatches(accountId, since, true, hero?.id),
+            partnerLines(interaction, accountId, since, false, hero?.id),
+            partnerLines(interaction, accountId, since, true, hero?.id)
+        ]);
+        const components = [periodRow(PERIODS, key)];
+
+        if(standard.length == 0 && streetBrawl.length == 0) {
+            return { embeds: [errorEmbed("No Games Recorded", `Nothing stored for ${name}${hero ? ` on ${hero.name}` : ""} (${period.label.toLowerCase()})`)], components };
+        }
+
+        const embeds : APIEmbed[] = [];
+        if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, !!hero, standardPartners));
+        if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, !!hero, streetBrawlPartners));
+
+        embeds[0].author = { name: `${name}'s ${hero ? `${hero.name} ` : ""}Stats`, icon_url: (member ?? user).displayAvatarURL() };
+        if(icon) embeds[0].thumbnail = { url: icon };
+        embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games` };
+        if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
+
+        return { embeds, components };
+    };
+
+    await interactive(interaction, { period: interaction.options.getString("period") ?? "all" }, render, (state, i) =>
+        i.isStringSelectMenu() ? { period: i.values[0] } : state
+    );
 }

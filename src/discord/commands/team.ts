@@ -1,9 +1,10 @@
-import { type APIEmbed, type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder, type User } from "discord.js";
+import { type APIEmbed, ActionRowBuilder, type ChatInputCommandInteraction, InteractionContextType, type MessageActionRowComponentBuilder, SlashCommandBuilder, type User, UserSelectMenuBuilder } from "discord.js";
 import { getTeamMatches, type Match } from "../../db/mod.ts";
 import { heroName, rankName } from "../../deadlock/assets.ts";
 import { formatPlayed, kda, PERIODS, pct, record, streaks, sum } from "../../helpers/stats.ts";
 import { getAccount } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
+import { interactive, periodRow, type View } from "../interactive.ts";
 
 // Street Brawl teams max out at 4, so a bigger group can only have played standard
 const STREET_BRAWL_MAX = 4;
@@ -79,46 +80,77 @@ async function modeEmbed(title : string, games : Match[][], streetBrawl : boolea
 }
 
 export async function execute(interaction : ChatInputCommandInteraction) {
-    const users : User[] = [
-        interaction.options.getUser("user") ?? interaction.user,
+    const first = interaction.options.getUser("user") ?? interaction.user;
+    const partners : User[] = [
         interaction.options.getUser("partner", true),
         ...Array.from({ length: EXTRA_PARTNERS }, (_, i) => interaction.options.getUser(`partner${i + 2}`)).filter(x => x != null)
     ];
 
-    if(new Set(users.map(x => x.id)).size != users.length) {
+    if(new Set([first, ...partners].map(x => x.id)).size != partners.length + 1) {
         return await interaction.reply({ embeds: [errorEmbed("Pick Different People", "Each player can only be picked once")] });
     }
 
-    const accounts = users.map(x => getAccount(x.id));
-    const unlinked = users.filter((_, i) => accounts[i] == undefined).map(x => `<@${x.id}>`);
+    const unlinked = [first, ...partners].filter(x => getAccount(x.id) == undefined).map(x => `<@${x.id}>`);
     if(unlinked.length > 0) {
         return await interaction.reply({ embeds: [errorEmbed("Not Linked", `${unlinked.join(", ")} ${unlinked.length > 1 ? "aren't" : "isn't"} linked to a Deadlock account, use /link`)] });
     }
 
     await interaction.deferReply();
 
-    const accountIds = accounts as number[];
-    const period = PERIODS[interaction.options.getString("period") ?? "all"];
-    const since = period.since();
-    const [standard, streetBrawl] = await Promise.all([
-        getTeamMatches(accountIds, since, false),
-        users.length > STREET_BRAWL_MAX ? [] : getTeamMatches(accountIds, since, true)
-    ]);
+    const body = async (key : string, users : User[]) : Promise<APIEmbed[]> => {
+        const accounts = users.map(x => getAccount(x.id));
+        const missing = users.filter((_, i) => accounts[i] == undefined).map(x => `<@${x.id}>`);
+        if(missing.length > 0) {
+            return [errorEmbed("Not Linked", `${missing.join(", ")} ${missing.length > 1 ? "aren't" : "isn't"} linked to a Deadlock account, use /link`)];
+        }
 
-    const names = await Promise.all(users.map(async x => (await interaction.guild!.members.fetch(x.id).catch(() => undefined))?.displayName ?? x.displayName));
+        const accountIds = accounts as number[];
+        const period = PERIODS[key];
+        const since = period.since();
+        const [standard, streetBrawl] = await Promise.all([
+            getTeamMatches(accountIds, since, false),
+            users.length > STREET_BRAWL_MAX ? [] : getTeamMatches(accountIds, since, true)
+        ]);
 
-    if(standard.length == 0 && streetBrawl.length == 0) {
-        return await interaction.editReply({ embeds: [errorEmbed("No Games Together", `${names.join(", ")} have no stored games on the same team (${period.label.toLowerCase()})`)] });
-    }
+        const names = await Promise.all(users.map(async x => (await interaction.guild!.members.fetch(x.id).catch(() => undefined))?.displayName ?? x.displayName));
 
-    const embeds : APIEmbed[] = [];
-    if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, names));
-    if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, names));
+        if(standard.length == 0 && streetBrawl.length == 0) {
+            return [errorEmbed("No Games Together", `${names.join(", ")} have no stored games on the same team (${period.label.toLowerCase()})`)];
+        }
 
-    const note = users.length > STREET_BRAWL_MAX ? "standard only · " : "";
-    embeds[0].author = { name: names.join(" + ") };
-    embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games · ${note}same team, not necessarily queued together` };
-    if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
+        const embeds : APIEmbed[] = [];
+        if(standard.length > 0) embeds.push(await modeEmbed("Standard", standard, false, names));
+        if(streetBrawl.length > 0) embeds.push(await modeEmbed("Street Brawl", streetBrawl, true, names));
 
-    await interaction.editReply({ embeds });
+        const note = users.length > STREET_BRAWL_MAX ? "standard only · " : "";
+        embeds[0].author = { name: names.join(" + ") };
+        embeds.at(-1)!.footer = { text: `${period.label} · ${standard.length + streetBrawl.length} games · ${note}same team, not necessarily queued together` };
+        if(since > 0) embeds.at(-1)!.timestamp = new Date(since * 1000).toISOString();
+
+        return embeds;
+    };
+
+    type State = { period : string, partners : User[] };
+    const render = async (state : State) : Promise<View> => ({
+        embeds: await body(state.period, [first, ...state.partners]),
+        components: [
+            periodRow(PERIODS, state.period),
+            new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
+                new UserSelectMenuBuilder()
+                    .setCustomId("partners")
+                    .setPlaceholder("Teammates")
+                    .setMinValues(1)
+                    .setMaxValues(EXTRA_PARTNERS + 1)
+                    .setDefaultUsers(state.partners.map(x => x.id))
+            )
+        ]
+    });
+
+    await interactive<State>(interaction, { period: interaction.options.getString("period") ?? "all", partners }, render, (state, i) => {
+        if(i.isStringSelectMenu()) return { ...state, period: i.values[0] };
+
+        const picked = [...i.users.values()].filter(x => x.id != first.id);
+        if(picked.length == 0) return `Pick at least one teammate other than ${first.displayName}`;
+        return { ...state, partners: picked };
+    });
 }

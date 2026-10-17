@@ -1,9 +1,21 @@
 import { type ChatInputCommandInteraction, type GuildMember, InteractionContextType, SlashCommandBuilder } from "discord.js";
 import { getPeriodTotals, getStreak } from "../../db/mod.ts";
+import { PERIODS } from "../../helpers/stats.ts";
 import { lossWindowStart } from "../../helpers/window.ts";
 import { getUser, LinkStore } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
+import { interactive, periodRow, type View } from "../interactive.ts";
 import { fetchMembers } from "../util.ts";
+
+// The default is the 2 week window used by announcements and status lines, the dropdown widens or narrows it
+const DEFAULT_PERIOD = "fortnight";
+const BOARD_PERIODS : typeof PERIODS = {
+    day: PERIODS.day,
+    week: PERIODS.week,
+    fortnight: { name: "Last 2 weeks", label: "Last 2 weeks", since: lossWindowStart },
+    month: PERIODS.month,
+    all: PERIODS.all
+};
 
 export const data = new SlashCommandBuilder()
     .setName("leaderboard")
@@ -28,25 +40,34 @@ async function board(since : number, streetBrawl : boolean, members : Map<string
 export async function execute(interaction : ChatInputCommandInteraction) {
     await interaction.deferReply();
 
-    const since = lossWindowStart();
-    const members = await fetchMembers(interaction.guild!, [...LinkStore.get().links.keys()]);
+    const render = async ({ period : key } : { period : string }) : Promise<View> => {
+        const period = BOARD_PERIODS[key];
+        const since = period.since();
+        const members = await fetchMembers(interaction.guild!, [...LinkStore.get().links.keys()]);
 
-    const standard = await board(since, false, members);
-    const streetBrawl = await board(since, true, members);
+        const standard = await board(since, false, members);
+        const streetBrawl = await board(since, true, members);
+        const components = [periodRow(BOARD_PERIODS, key)];
 
-    if(standard.length == 0 && streetBrawl.length == 0) {
-        return await interaction.editReply({ embeds: [errorEmbed("No Games Recorded", "Nobody has played in the last 2 weeks")] });
-    }
+        if(standard.length == 0 && streetBrawl.length == 0) {
+            return { embeds: [errorEmbed("No Games Recorded", `Nobody has played in the period: ${period.label.toLowerCase()}`)], components };
+        }
 
-    const lines : string[] = [];
-    if(standard.length > 0) lines.push("**Standard**", ...standard);
-    if(streetBrawl.length > 0) lines.push(lines.length > 0 ? "\n**Street Brawl**" : "**Street Brawl**", ...streetBrawl);
+        const lines : string[] = [];
+        if(standard.length > 0) lines.push("**Standard**", ...standard);
+        if(streetBrawl.length > 0) lines.push(lines.length > 0 ? "\n**Street Brawl**" : "**Street Brawl**", ...streetBrawl);
 
-    await interaction.editReply({ embeds: [{
-        title: "Loserboard",
-        description: lines.join("\n").slice(0, 4096),
-        color: COLOURS.gold,
-        footer: { text: "Last 2 weeks" },
-        timestamp: new Date(since * 1000).toISOString()
-    }] });
+        return {
+            embeds: [{
+                title: "Loserboard",
+                description: lines.join("\n").slice(0, 4096),
+                color: COLOURS.gold,
+                footer: { text: period.label },
+                ...(since > 0 && { timestamp: new Date(since * 1000).toISOString() })
+            }],
+            components
+        };
+    };
+
+    await interactive(interaction, { period: DEFAULT_PERIOD }, render, (state, i) => i.isStringSelectMenu() ? { period: i.values[0] } : state);
 }

@@ -7,6 +7,7 @@
 - Owner-only commands (`/adminlink`, `/status`, `/steamguard`) check `isOwner(interaction)` from `discord/util.ts`, which accepts `OWNER_ID` or the bot application owner.
 - Replies are usually ephemeral. Slow commands call `deferReply` first, then `editReply`. Build embeds with `errorEmbed` and `successEmbed` from `discord/embeds.ts`.
 - `handleInteraction` logs every command run and masks the `code` option. It also replies with a generic error if `execute` throws, so commands don't need their own try/catch.
+- `/stats`, `/team` and `/leaderboard` attach a period dropdown (and `/team` a teammate user-select) via `interactive()` in `discord/interactive.ts`. It sends the first view, then re-renders when the command's user changes a control, using a collector on the reply that disables the controls after 10 minutes idle. Other users get an ephemeral "not yours" reply. State lives in the command's closure, so controls stop working after a restart. `/leaderboard` defaults to the 2 week loss window but the dropdown can change it.
 - `/adminlink` re-exports `link.ts`'s `autocomplete` and reuses its `linkAccount`.
 
 ## Lines (`src/lines/`)
