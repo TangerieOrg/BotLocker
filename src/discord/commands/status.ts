@@ -1,6 +1,5 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../../config.ts";
-import { getPendingProbe, getRecentProbes, type LimitProbe } from "../../db/saltProbes.ts";
 import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
 import { saltState } from "../../salts/effects.ts";
@@ -24,8 +23,6 @@ const ORDER : [SaltStatus, string][] = [
 ];
 
 const when = (at : number) => `<t:${at}:R>`;
-const describeProbe = (x : LimitProbe) =>
-    `${x.account} +${Math.round((x.probed_at! - x.episode_started_at) / 60)}m: ${x.result!.replace("_", " ")} (after ${x.fetched_before ?? "?"} requests)`;
 const pause = (until : number) => until > now() ? `paused until ${when(until)}` : "ok";
 
 export async function execute(interaction : ChatInputCommandInteraction) {
@@ -35,11 +32,9 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const at = now();
     const accounts = getAccounts();
-    const [summary, logs, pending, recent] = await Promise.all([
+    const [summary, logs] = await Promise.all([
         getSaltSummary(at),
-        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username))),
-        Promise.all(accounts.map(x => getPendingProbe(x.username))),
-        getRecentProbes(8)
+        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username)))
     ]);
 
     const total = Object.values(summary.counts).reduce((a, b) => a + b, 0);
@@ -48,11 +43,8 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const budget = accounts.map((account, i) => {
         const fetches = logs[i];
         const parts = [`${account.username}: ${fetches.length}/${SALT_FETCH_DAILY_CAP}`];
-        const probe = pending[i];
-        if(probe) {
-            parts.push(`rate limited ${when(probe.episode_started_at)}, probing again ${when(Math.max(probe.due_at, at))}`);
-        } else if(fetches.length >= SALT_FETCH_DAILY_CAP) {
-            parts.push(`allowance spent, waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
+        if(fetches.length >= SALT_FETCH_DAILY_CAP) {
+            parts.push(`allowance spent (or rate limited), waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
         } else if(fetches.length > 0) {
             const nextSlot = Math.max(...fetches) + SALT_FETCH_INTERVAL_MS / 1000;
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
@@ -81,7 +73,6 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             description: `${total} matches tracked\n${counts}`,
             fields: [
                 { name: "Queue", value: queue.join(", ") },
-                { name: "Rate limit probes (minutes after it started, newest first)", value: recent.length ? recent.map(describeProbe).join("\n") : "None yet" },
                 { name: "GC budget", value: budget.join("\n") },
                 {
                     name: "Services",

@@ -1,6 +1,5 @@
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_PROBE_WAITS_S, SALT_UPLOAD } from "../config.ts";
-import { getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
-import { finishProbe, getPendingProbe, type LimitProbe, startEpisode } from "../db/saltProbes.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
+import { exhaustFetchLog, getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
@@ -86,13 +85,8 @@ const logUser = (account : SteamAccount) => account.main ? undefined : account.u
 // Matches being fetched right now, so two accounts never take the same one
 const inFlight = new Set<number>();
 
-// How soon the limit lifts isn't known, so after one the account sends a probe at each of SALT_PROBE_WAITS_S since it was first limited,
-// until a request gets through, and every probe is kept in salt_limit_probes
-const nextProbeAt = (episodeStart : number, attempt : number) =>
-    SALT_PROBE_WAITS_S[attempt] != undefined ? episodeStart + SALT_PROBE_WAITS_S[attempt] : now() + 24 * 60 * 60;
-
 // Like deadlock-api-ingest: each account works through its daily allowance in a burst, one request every
-// SALT_FETCH_INTERVAL_MS, until it's spent or Steam rate limits it, after which it only sends probes (see nextProbeAt)
+// SALT_FETCH_INTERVAL_MS, until it's spent or Steam rate limits it (which spends the rest of it)
 async function fetchLoop(account : SteamAccount) {
     while(true) {
         try {
@@ -113,8 +107,6 @@ async function fetchNext(account : SteamAccount) {
 
     const fetches = await getFetchLog(now(), logUser(account));
     if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
-    const probe = await getPendingProbe(account.username);
-    if(probe && now() < probe.due_at) return false;
     if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return false;
 
     const row = (await dueRows("missing", inFlight.size + 1)).find(x => !inFlight.has(x.match_id));
@@ -122,14 +114,14 @@ async function fetchNext(account : SteamAccount) {
 
     inFlight.add(row.match_id);
     try {
-        await fetchOne(account, row, probe);
+        await fetchOne(account, row);
     } finally {
         inFlight.delete(row.match_id);
     }
     return true;
 }
 
-async function fetchOne(account : SteamAccount, row : SaltRow, probe? : LimitProbe) {
+async function fetchOne(account : SteamAccount, row : SaltRow) {
     let res;
     try {
         res = await getGcMatchSalts(account, row.match_id);
@@ -137,20 +129,11 @@ async function fetchOne(account : SteamAccount, row : SaltRow, probe? : LimitPro
         // Not connected means it never left, anything else may have counted against us
         if(!message(err).startsWith("Not connected")) {
             await recordFetch(now(), logUser(account));
-            if(probe) await finishProbe(probe, now(), "error", nextProbeAt(probe.episode_started_at, probe.attempt + 1));
             await retrySalt(row.match_id, backoff(row), message(err), MAX_ATTEMPTS);
         }
         return;
     }
     await recordFetch(now(), logUser(account));
-
-    // A salt or an invalid match is the coordinator answering normally again, other codes (busy, timeout) prove nothing
-    const recovered = res.result == GcResult.Success || res.result == GcResult.InvalidMatch;
-    if(probe && res.result != GcResult.RateLimited) {
-        const result = recovered ? "ok" : `code_${res.result}`;
-        await finishProbe(probe, now(), result, recovered ? undefined : nextProbeAt(probe.episode_started_at, probe.attempt + 1));
-        if(recovered) log(`Salt fetching works again on ${account.username}, ${Math.round((now() - probe.episode_started_at) / 60)}m after it was rate limited`);
-    }
 
     switch(res.result) {
         case GcResult.Success:
@@ -162,14 +145,9 @@ async function fetchOne(account : SteamAccount, row : SaltRow, probe? : LimitPro
             }
             break;
         case GcResult.RateLimited:
-            if(probe) {
-                await finishProbe(probe, now(), "rate_limited", nextProbeAt(probe.episode_started_at, probe.attempt + 1));
-                error(`GC still rate limiting ${account.username}, ${Math.round((now() - probe.episode_started_at) / 60)}m after it started`);
-            } else {
-                const fetched = (await getFetchLog(now(), logUser(account))).length;
-                await startEpisode(account.username, now(), fetched, nextProbeAt(now(), 0));
-                error(`GC rate limited salt fetching on ${account.username} after ${fetched} requests in 24h, probing again in ${SALT_PROBE_WAITS_S[0] / 60}m`);
-            }
+            // Same as deadlock-api-ingest: Steam's limit doesn't clear in hours, so the whole 24h allowance is spent
+            await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, logUser(account));
+            error(`GC rate limited salt fetching on ${account.username}, nothing more from it for 24h`);
             break;
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
