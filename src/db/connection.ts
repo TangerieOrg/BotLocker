@@ -93,21 +93,19 @@ await withDb(db => {
 
         CREATE INDEX IF NOT EXISTS match_salts_due ON match_salts (status, salt_check_after);
 
-        -- One row per burst of salt requests on an account, from its first request until Steam rate limited it (or it spent its allowance),
-        -- kept to see how many requests each spacing gets before the limit
-        CREATE TABLE IF NOT EXISTS salt_fetch_runs (
+        -- After Steam rate limits an account, one row per scheduled probe: a salt request sent at due_at to see whether fetching works again.
+        -- An episode (everything sharing episode_started_at) runs until a probe gets through
+        CREATE TABLE IF NOT EXISTS salt_limit_probes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             account TEXT NOT NULL,
-            interval_ms INTEGER NOT NULL,
-            started_at INTEGER NOT NULL,
-            last_at INTEGER NOT NULL,
-            ended_at INTEGER,
-            -- Every request sent, including the one that got rate limited
-            requests INTEGER NOT NULL DEFAULT 0,
-            -- Requests the game coordinator answered with a success
-            ok INTEGER NOT NULL DEFAULT 0,
-            -- open, rate_limited, cap (spent the allowance without being limited) or idle (nothing to fetch for a day)
-            outcome TEXT NOT NULL DEFAULT 'open'
+            episode_started_at INTEGER NOT NULL,
+            -- Requests the account had made in the last 24h when it got limited, null if unknown
+            fetched_before INTEGER,
+            attempt INTEGER NOT NULL,
+            due_at INTEGER NOT NULL,
+            probed_at INTEGER,
+            -- ok, rate_limited, error or code_<n>, null until it's been sent
+            result TEXT
         );
 
         CREATE TABLE IF NOT EXISTS kv (

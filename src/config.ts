@@ -37,8 +37,10 @@ export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;
 export const SALT_UPLOAD = getBool("SALT_UPLOAD") ?? true;
 // Wait this long after a match ends so deadlock-api's own ingest gets there first, the game coordinator's salt limit is tight
 export const SALT_DELAY_S = (getNumber("SALT_DELAY_MS") ?? 30 * 60 * 1000) / 1000;
-// Spacing between salt requests. Each account's burst (until Steam rate limits it) uses one of these, whichever has been tried least,
-// and how far it got is kept in salt_fetch_runs. 20s is deadlock-api-ingest's cadence, a single value turns the variation off
-const intervals = (Deno.env.get("SALT_FETCH_INTERVALS_MS") ?? "").split(",").map(x => Number(x.trim())).filter(x => x > 0);
-export const SALT_FETCH_INTERVALS_MS = intervals.length ? intervals : [20, 60, 180, 600, 1800].map(x => x * 1000);
+// Same cadence as deadlock-api-ingest, a faster one trips Steam's per-account limit sooner
+export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 20 * 1000;
+// Minutes after a rate limit that the account sends a probe request to see if it works again, until one gets through (every 24h after the last).
+// Each probe and its result is kept in salt_limit_probes
+const waits = (Deno.env.get("SALT_PROBE_WAITS_MIN") ?? "").split(",").map(x => Number(x.trim())).filter(x => x > 0);
+export const SALT_PROBE_WAITS_S = (waits.length ? waits : [2, 5, 10, 20, 30, 60, 120, 240, 480, 720, 1440]).map(x => x * 60);
 export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 40;
