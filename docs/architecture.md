@@ -18,7 +18,7 @@ The usual pattern is "compute the wanted set, then act on `diffSet(cur, prev).ad
 
 1. Importing modules has side effects. `db/connection.ts` creates the data dir and the schema with a top-level `await`, and `LinkStore` loads links from SQLite at import time.
 2. Effects start: `startFriends`, `startTracker`, `startAnnouncer`, `startGuardNotice`, `startPresence`, `startSalts`. They do nothing useful until the stores fill up.
-3. `startSteam()` logs in every `STEAM_USERS` account. The first account is `main` and the others are salt-only, each logging in 5s after the previous one.
+3. `startSteam()` logs in every `STEAM_USERS` account. The first account is `main` and the others are salt-only, each logging in 5s after the previous one. `|lazy` accounts only do a one-off setup login and then log in per fetch (see `tracking.md`).
 4. `startDiscord()` loads the slash commands and logs in. On ready it fetches `CHANNEL_ID`, registers the commands to that channel's guild only (and clears any global ones), then calls `setChannel`. Anything waiting on `DiscordStore.channel` (announcer, presence, guard DMs) starts at that point.
 
 A missing `DISCORD_TOKEN`, `CHANNEL_ID` or `STEAM_USERS`, or a bad channel, calls `Deno.exit(1)`.

@@ -133,7 +133,7 @@ async function pickMissing() : Promise<SaltRow | undefined> {
 
 // Whether a request went out
 async function fetchNext(account : SteamAccount) {
-    if(!SALT_UPLOAD || !account.isReady()) return false;
+    if(!SALT_UPLOAD || !account.available()) return false;
 
     const fetches = await getFetchLog(now(), logUser(account));
     if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
@@ -143,7 +143,8 @@ async function fetchNext(account : SteamAccount) {
     if(!row) return false;
 
     try {
-        await fetchOne(account, row);
+        // On-demand accounts only log in now, after deadlock-api has confirmed there's something to fetch
+        await account.session(() => fetchOne(account, row));
     } finally {
         inFlight.delete(row.match_id);
     }

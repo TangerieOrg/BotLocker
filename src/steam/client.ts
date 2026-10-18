@@ -12,7 +12,7 @@ import { activityFromStatus, modeLabel } from "./activity.ts";
 import { watch } from "../helpers/store.ts";
 import type { SteamPersona } from "./types.ts";
 import {
-    DEADLOCK_APP_ID, gameName, type Login, type OnlineStatus, type Persona, setBot, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
+    DEADLOCK_APP_ID, gameName, isFriend, type Login, type OnlineStatus, type Persona, setBot, setGame, setGcReady, setLimited, setLogin, setOnline, setPersona, setRelation, setRelations, setSelf, SteamStore
 } from "./SteamStore.ts";
 const GC_HELLO = 4006;
 const GC_WELCOME = 4004;
@@ -23,6 +23,13 @@ const RELOGIN_MS = 5 * 60 * 1000;
 const RICH_PRESENCE_POLL_MS = 30 * 1000;
 // Spread the extra accounts out so Steam doesn't throttle a burst of logins
 const EXTRA_LOGIN_GAP_MS = 5000;
+// An on-demand session gives up if the game coordinator hasn't answered by then
+const SESSION_READY_MS = 90 * 1000;
+// A code from the Steam mobile app needs the owner to notice the DM
+const SESSION_GUARD_MS = 10 * 60 * 1000;
+// Breathing room after a session so the owner's presence settles, longer after one that failed or got kicked
+const SESSION_COOLDOWN_MS = 60 * 1000;
+const SESSION_FAILED_COOLDOWN_MS = 15 * 60 * 1000;
 
 const { log, error } = logger("Steam");
 
@@ -32,6 +39,12 @@ export interface SteamAccount {
     username: string;
     // The first account in STEAM_USERS, the only one with friends. The rest just fetch salts
     main: boolean;
+    // Personal account that only logs in for a fetch (see session), the rest stay logged in
+    lazy: boolean;
+    // Whether a fetch can start now. For an on-demand account that also means its owner isn't on Steam
+    available(): boolean;
+    // Runs fn with the game coordinator connected. On-demand accounts log in for it and out again after
+    session<T>(fn : () => Promise<T>): Promise<T>;
     isReady(): boolean;
     selfId(): number | undefined;
     gcJob(type : number, payload : Uint8Array): Promise<Uint8Array>;
@@ -45,16 +58,22 @@ let terminalBusy = false;
 // Main first
 export const getAccounts = () : readonly SteamAccount[] => accounts;
 
-function createAccount(creds : { username : string, password : string }, main : boolean) {
+function createAccount(creds : { username : string, password : string, lazy? : boolean }, main : boolean) {
     const { username, password } = creds;
-    const tag = main ? username : `${username} (salts only)`;
+    const lazy = !main && !!creds.lazy;
+    const tag = main ? username : `${username} (salts only${lazy ? ", on demand" : ""})`;
     const tokenKey = main ? TOKEN_KEY : `${TOKEN_KEY}:${username}`;
+    // Where its own account id is kept, so presence can be checked before the first login of a run
+    const selfKey = `steam_self:${username}`;
+    let cooldownUntil = 0;
+    let warnedNotFriend = false;
     const loggedOut : Login = { state: "loggedOut" };
 
     const client = new SteamUser({
         webCompatibilityMode: true,
         renewRefreshTokens: true,
-        autoRelogin: true,
+        // On demand accounts must stay down when kicked, a relogin would kick the owner right back
+        autoRelogin: !lazy,
         dataDirectory: `${DATA_DIR}/steam`
     });
 
@@ -74,7 +93,9 @@ function createAccount(creds : { username : string, password : string }, main : 
         log(`Logged in as ${tag}`);
         setSelfId(client.steamID!.accountid);
         setLoginState({ state: "loggedOn" });
-        client.setPersona(SteamUser.EPersonaState.Online);
+        // Staying offline keeps friends from seeing an on-demand login
+        if(lazy) setKv(selfKey, String(client.steamID!.accountid)).catch(err => error(`Couldn't save account id for ${tag}`, err));
+        else client.setPersona(SteamUser.EPersonaState.Online);
     });
 
     // Only asked for on a password login from somewhere new, the saved token skips it after that
@@ -116,6 +137,11 @@ function createAccount(creds : { username : string, password : string }, main : 
         if(!blocked) return;
         error(`Someone else is playing on ${tag}, game coordinator is unavailable`);
         setReady(false);
+        // Holding the game slot would keep kicking the owner out of Deadlock
+        if(lazy) {
+            cooldownUntil = Date.now() + SESSION_FAILED_COOLDOWN_MS;
+            client.logOff();
+        }
     });
 
     client.on("disconnected", (_result, msg) => {
@@ -139,9 +165,14 @@ function createAccount(creds : { username : string, password : string }, main : 
             error(`Login failed for ${tag} (${err.message}), check STEAM_USERS. ${main ? "Match tracking" : "Salt fetching on it"} is off until restart`);
             setLoginState({ state: "failed" });
         } else {
-            error(`${tag}: ${err.message}, retrying in ${RELOGIN_MS / 60000}m`);
             setLoginState(loggedOut);
-            setTimeout(logOn, RELOGIN_MS);
+            if(lazy) {
+                error(`${tag}: ${err.message}, leaving it alone for ${SESSION_FAILED_COOLDOWN_MS / 60000}m`);
+                cooldownUntil = Date.now() + SESSION_FAILED_COOLDOWN_MS;
+            } else {
+                error(`${tag}: ${err.message}, retrying in ${RELOGIN_MS / 60000}m`);
+                setTimeout(logOn, RELOGIN_MS);
+            }
         }
     });
 
@@ -173,9 +204,89 @@ function createAccount(creds : { username : string, password : string }, main : 
         });
     });
 
+    // Resolves once the game coordinator answers. Rejects if the login fails, gets kicked or times out
+    const waitReady = () => new Promise<void>((resolve, reject) => {
+        let timer : ReturnType<typeof setTimeout>;
+        const finish = (err? : Error) => {
+            clearTimeout(timer);
+            unsub();
+            if(err) reject(err);
+            else resolve();
+        };
+        const arm = (ms : number, giveUp : () => void) => {
+            clearTimeout(timer);
+            timer = setTimeout(giveUp, ms);
+        };
+        const timedOut = () => finish(new Error(`${tag} didn't reach the game coordinator`));
+        const unsub = SteamStore.subscribe(s => [readyOf(s), loginOf(s)] as const, ([ready, login], prev) => {
+            if(ready) return finish();
+            if(login.state == "failed") return finish(new Error(`Login failed for ${tag}`));
+            if(login.state == "loggedOut") return finish(new Error(`${tag} was disconnected`));
+            if(login.state == prev?.[1].state) return;
+            if(login.state == "guard") {
+                // Nobody to ask a second time, so a code that never comes switches the account off until restart
+                arm(SESSION_GUARD_MS, () => {
+                    error(`No Steam Guard code for ${tag}, it stays off until restart`);
+                    setLoginState({ state: "failed" });
+                    finish(new Error(`Steam Guard code for ${tag} never came`));
+                });
+            } else arm(SESSION_READY_MS, timedOut);
+        });
+        arm(SESSION_READY_MS, timedOut);
+    });
+
+    async function session<T>(fn : () => Promise<T>) : Promise<T> {
+        if(!lazy) return await fn();
+
+        let failed = false;
+        try {
+            await logOn();
+            await waitReady();
+            return await fn();
+        } catch(err) {
+            failed = true;
+            throw err;
+        } finally {
+            client.logOff();
+            setReady(false);
+            // A bad login stays failed so the password isn't tried again
+            if(loginOf().state != "failed") setLoginState(loggedOut);
+            cooldownUntil = Math.max(cooldownUntil, Date.now() + (failed ? SESSION_FAILED_COOLDOWN_MS : SESSION_COOLDOWN_MS));
+        }
+    }
+
+    // Only the main bot can see presence, so the owner has to be one of its friends for this to know when they're on
+    function available() {
+        if(!lazy) return readyOf();
+        const s = SteamStore.get();
+        if(Date.now() < cooldownUntil || loginOf(s).state == "failed") return false;
+
+        const self = s.bots.get(username)?.self;
+        if(!self || !s.relationsLoaded) return false;
+        if(!isFriend(self)) {
+            if(!warnedNotFriend) error(`${tag} isn't friends with ${STEAM_USERS[0].username}, so it can't tell when you're on Steam and stays off. Add the bot from that account`);
+            warnedNotFriend = true;
+            return false;
+        }
+        warnedNotFriend = false;
+        return !s.online.has(self);
+    }
+
+    // First run needs a login to learn its account id and (via Steam Guard) get a saved token, after that it stays logged out
+    async function setup() {
+        const [token, self] = await Promise.all([getKv(tokenKey), getKv(selfKey)]);
+        if(self) setBot(username, { self: Number(self) });
+        if(token && self) return log(`${tag} will log in when it has a salt to fetch`);
+        log(`Logging ${tag} in once to set it up`);
+        await session(async () => {}).catch(err => error(`Couldn't set up ${tag}`, err));
+    }
+
     const account : SteamAccount = {
         username,
         main,
+        lazy,
+        available,
+        session,
         isReady: () => readyOf(),
         selfId: () => main ? SteamStore.get().self : SteamStore.get().bots.get(username)?.self,
         gcJob
@@ -186,7 +297,7 @@ function createAccount(creds : { username : string, password : string }, main : 
         registerMainHandlers(client);
     }
 
-    return { account, logOn };
+    return { account, logOn, setup };
 }
 
 // Friends, presence and personas only exist on the main account
@@ -365,8 +476,9 @@ export function startSteam() {
     }
 
     STEAM_USERS.forEach((creds, i) => {
-        const { logOn } = createAccount(creds, i == 0);
-        if(i == 0) logOn();
-        else setTimeout(logOn, i * EXTRA_LOGIN_GAP_MS);
+        const { account, logOn, setup } = createAccount(creds, i == 0);
+        const start = account.lazy ? setup : logOn;
+        if(i == 0) start();
+        else setTimeout(start, i * EXTRA_LOGIN_GAP_MS);
     });
 }
