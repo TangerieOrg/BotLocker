@@ -101,6 +101,36 @@ async function fetchLoop(account : SteamAccount) {
     }
 }
 
+// The next missing match that deadlock-api still doesn't have, claimed in inFlight. Ones it picked up since the
+// first check are marked covered on the way, so they don't spend any of the GC allowance
+async function pickMissing() : Promise<SaltRow | undefined> {
+    while(true) {
+        if(now() < saltState.apiPausedUntil) return;
+        const rows = (await dueRows("missing", CHECK_BATCH + inFlight.size)).filter(x => !inFlight.has(x.match_id)).slice(0, CHECK_BATCH);
+        if(rows.length == 0) return;
+
+        let known;
+        try {
+            known = await getKnownMatches(rows.map(x => x.match_id));
+        } catch(err) {
+            apiFailed(err);
+            return;
+        }
+        for(const x of rows) {
+            if(!known.has(x.match_id)) continue;
+            await checkRow(x, known);
+            log(`${x.match_id} is on deadlock-api now, skipping the GC fetch`);
+        }
+
+        // Nothing awaits between this find and the claim, so two accounts can't take the same match
+        const row = rows.find(x => !known.has(x.match_id) && !inFlight.has(x.match_id));
+        if(row) {
+            inFlight.add(row.match_id);
+            return row;
+        }
+    }
+}
+
 // Whether a request went out
 async function fetchNext(account : SteamAccount) {
     if(!SALT_UPLOAD || !account.isReady()) return false;
@@ -109,10 +139,9 @@ async function fetchNext(account : SteamAccount) {
     if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
     if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return false;
 
-    const row = (await dueRows("missing", inFlight.size + 1)).find(x => !inFlight.has(x.match_id));
+    const row = await pickMissing();
     if(!row) return false;
 
-    inFlight.add(row.match_id);
     try {
         await fetchOne(account, row);
     } finally {
