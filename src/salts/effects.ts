@@ -1,5 +1,5 @@
 import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
-import { exhaustFetchLog, getDueSalts, getFetchLog, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
+import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
@@ -11,6 +11,7 @@ const { log, error } = logger("Salts");
 
 const TICK_MS = 60 * 1000;
 const SEED_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const RECHECK_INTERVAL_S = 24 * 60 * 60;
 const CHECK_BATCH = 100;
 // deadlock-api allows 30 of these a minute
 const CHECK_GAP_MS = 2100;
@@ -77,6 +78,36 @@ async function runChecks() {
         }
         await sleep(CHECK_GAP_MS);
     }
+}
+
+// Matches get marked missing once, so ones deadlock-api picks up later would otherwise sit there until a fetch
+// tries them. This sweeps all of them, due or not, and covers the ones it has now. Whether it got through them all
+async function recheckMissing() : Promise<boolean> {
+    let after = 0;
+    let covered = 0;
+    while(true) {
+        if(now() < saltState.apiPausedUntil) return false;
+        const page = await getMissingSalts(after, CHECK_BATCH);
+        const last = page.at(-1);
+        if(!last) break;
+        after = last.match_id;
+        const rows = page.filter(x => !inFlight.has(x.match_id));
+
+        try {
+            const known = await getKnownMatches(rows.map(x => x.match_id));
+            const have = rows.filter(x => known.has(x.match_id));
+            for(let i = 0; i < have.length; i += SALT_READ_CONCURRENCY) {
+                await Promise.all(have.slice(i, i + SALT_READ_CONCURRENCY).map(x => checkRow(x, known)));
+            }
+            covered += have.length;
+        } catch(err) {
+            apiFailed(err);
+            return false;
+        }
+        await sleep(CHECK_GAP_MS);
+    }
+    log(`Rechecked the missing backlog, deadlock-api has ${covered} of them now`);
+    return true;
 }
 
 // Main's fetch log keeps the original key, the extras have their own
@@ -239,11 +270,14 @@ export function startSalts() {
     if(!SALT_UPLOAD) log("SALT_UPLOAD is off, only checking what deadlock-api has");
 
     let running = false;
+    let recheckAt = 0;
     const tick = async () => {
         if(running) return;
         running = true;
         try {
             await runChecks();
+            // Read-only like the checks, so it runs with uploading off too. Once on startup, then daily
+            if(now() >= recheckAt && await recheckMissing()) recheckAt = now() + RECHECK_INTERVAL_S;
             await runUploads();
         } catch(err) {
             error("Salt run failed", err);

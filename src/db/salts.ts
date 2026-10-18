@@ -46,6 +46,14 @@ export const getDueSalts = asDbFunction((db, status : SaltStatus, limit : number
     return stmt.all(status, at, at, liveSince, limit);
 });
 
+// Every missing row after a match id, whether or not it's due, for sweeping the whole backlog in pages
+export const getMissingSalts = asDbFunction((db, afterMatchId : number, limit : number) => {
+    using stmt = db.prepare<SaltRow>(`--sql
+        SELECT * FROM match_salts WHERE status = 'missing' AND match_id > ? ORDER BY match_id ASC LIMIT ?
+    `);
+    return stmt.all(afterMatchId, limit);
+});
+
 export const setSaltStatus = asDbFunction((db, matchId : number, status : SaltStatus, salts? : Salts, source? : string, error? : string) => {
     const at = Math.floor(Date.now() / 1000);
     db.exec(`--sql
