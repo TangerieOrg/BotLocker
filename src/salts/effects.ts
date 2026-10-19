@@ -3,7 +3,7 @@ import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, re
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
-import { getAccounts, type SteamAccount } from "../steam/client.ts";
+import { EXTRA_LOGIN_GAP_MS, getAccounts, type SteamAccount } from "../steam/client.ts";
 import { GcResult, getGcMatchSalts } from "../steam/gc.ts";
 import { SteamStore } from "../steam/SteamStore.ts";
 
@@ -285,9 +285,11 @@ export function startSalts() {
 
     seed().catch(err => error("Couldn't queue stored matches", err));
     setInterval(() => seed().catch(err => error("Couldn't queue stored matches", err)), SEED_INTERVAL_MS);
-    // Accounts only exist once startSteam has run
+    // Accounts only exist once startSteam has run. Spread out so the on-demand ones don't log in together
     setTimeout(() => {
-        for(const account of getAccounts()) fetchLoop(account).catch(err => error("Salt fetch loop died", err));
+        getAccounts().forEach((account, i) => setTimeout(() => {
+            fetchLoop(account).catch(err => error("Salt fetch loop died", err));
+        }, i * EXTRA_LOGIN_GAP_MS));
     }, 10000);
     setTimeout(tick, 10000);
     setInterval(tick, TICK_MS);

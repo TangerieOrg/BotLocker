@@ -22,12 +22,12 @@ const TOKEN_KEY = "steam_refresh_token";
 const RELOGIN_MS = 5 * 60 * 1000;
 const RICH_PRESENCE_POLL_MS = 30 * 1000;
 // Spread the extra accounts out so Steam doesn't throttle a burst of logins
-const EXTRA_LOGIN_GAP_MS = 5000;
+export const EXTRA_LOGIN_GAP_MS = 5000;
 // An on-demand session gives up if the game coordinator hasn't answered by then
 const SESSION_READY_MS = 90 * 1000;
 // A code from the Steam mobile app needs the owner to notice the DM
 const SESSION_GUARD_MS = 10 * 60 * 1000;
-// Breathing room after a session so the owner's presence settles, longer after one that failed or got kicked
+// Breathing room after a personal session so the owner's presence settles, longer after any that failed or got kicked
 const SESSION_COOLDOWN_MS = 60 * 1000;
 const SESSION_FAILED_COOLDOWN_MS = 15 * 60 * 1000;
 
@@ -39,9 +39,9 @@ export interface SteamAccount {
     username: string;
     // The first account in STEAM_USERS, the only one with friends. The rest just fetch salts
     main: boolean;
-    // Personal account that only logs in for a fetch (see session), the rest stay logged in
-    lazy: boolean;
-    // Whether a fetch can start now. For an on-demand account that also means its owner isn't on Steam
+    // Every extra account only logs in for a fetch (see session), main stays logged in
+    onDemand: boolean;
+    // Whether a fetch can start now. For a personal (|lazy) account that also means its owner isn't on Steam
     available(): boolean;
     // Runs fn with the game coordinator connected. On-demand accounts log in for it and out again after
     session<T>(fn : () => Promise<T>): Promise<T>;
@@ -60,8 +60,10 @@ export const getAccounts = () : readonly SteamAccount[] => accounts;
 
 function createAccount(creds : { username : string, password : string, lazy? : boolean }, main : boolean) {
     const { username, password } = creds;
-    const lazy = !main && !!creds.lazy;
-    const tag = main ? username : `${username} (salts only${lazy ? ", on demand" : ""})`;
+    const onDemand = !main;
+    // A personal account, so it also waits for its owner to be off Steam
+    const lazy = onDemand && !!creds.lazy;
+    const tag = main ? username : `${username} (salts only, on demand${lazy ? ", personal" : ""})`;
     const tokenKey = main ? TOKEN_KEY : `${TOKEN_KEY}:${username}`;
     // Where its own account id is kept, so presence can be checked before the first login of a run
     const selfKey = `steam_self:${username}`;
@@ -72,8 +74,8 @@ function createAccount(creds : { username : string, password : string, lazy? : b
     const client = new SteamUser({
         webCompatibilityMode: true,
         renewRefreshTokens: true,
-        // On demand accounts must stay down when kicked, a relogin would kick the owner right back
-        autoRelogin: !lazy,
+        // On demand accounts stay down when kicked, a relogin would kick a personal account's owner right back
+        autoRelogin: !onDemand,
         dataDirectory: `${DATA_DIR}/steam`
     });
 
@@ -94,7 +96,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
         setSelfId(client.steamID!.accountid);
         setLoginState({ state: "loggedOn" });
         // Staying offline keeps friends from seeing an on-demand login
-        if(lazy) setKv(selfKey, String(client.steamID!.accountid)).catch(err => error(`Couldn't save account id for ${tag}`, err));
+        if(onDemand) setKv(selfKey, String(client.steamID!.accountid)).catch(err => error(`Couldn't save account id for ${tag}`, err));
         else client.setPersona(SteamUser.EPersonaState.Online);
     });
 
@@ -138,7 +140,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
         error(`Someone else is playing on ${tag}, game coordinator is unavailable`);
         setReady(false);
         // Holding the game slot would keep kicking the owner out of Deadlock
-        if(lazy) {
+        if(onDemand) {
             cooldownUntil = Date.now() + SESSION_FAILED_COOLDOWN_MS;
             client.logOff();
         }
@@ -166,7 +168,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
             setLoginState({ state: "failed" });
         } else {
             setLoginState(loggedOut);
-            if(lazy) {
+            if(onDemand) {
                 error(`${tag}: ${err.message}, leaving it alone for ${SESSION_FAILED_COOLDOWN_MS / 60000}m`);
                 cooldownUntil = Date.now() + SESSION_FAILED_COOLDOWN_MS;
             } else {
@@ -236,7 +238,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
     });
 
     async function session<T>(fn : () => Promise<T>) : Promise<T> {
-        if(!lazy) return await fn();
+        if(!onDemand) return await fn();
 
         let failed = false;
         try {
@@ -251,15 +253,18 @@ function createAccount(creds : { username : string, password : string, lazy? : b
             setReady(false);
             // A bad login stays failed so the password isn't tried again
             if(loginOf().state != "failed") setLoginState(loggedOut);
-            cooldownUntil = Math.max(cooldownUntil, Date.now() + (failed ? SESSION_FAILED_COOLDOWN_MS : SESSION_COOLDOWN_MS));
+            const cooldown = failed ? SESSION_FAILED_COOLDOWN_MS : lazy ? SESSION_COOLDOWN_MS : 0;
+            cooldownUntil = Math.max(cooldownUntil, Date.now() + cooldown);
         }
     }
 
     // Only the main bot can see presence, so the owner has to be one of its friends for this to know when they're on
     function available() {
-        if(!lazy) return readyOf();
+        if(!onDemand) return readyOf();
         const s = SteamStore.get();
-        if(Date.now() < cooldownUntil || loginOf(s).state == "failed") return false;
+        // Anything but loggedOut means a session (or the setup login) is already using the client
+        if(Date.now() < cooldownUntil || loginOf(s).state != "loggedOut") return false;
+        if(!lazy) return true;
 
         const self = s.bots.get(username)?.self;
         if(!self || !s.relationsLoaded) return false;
@@ -284,7 +289,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
     const account : SteamAccount = {
         username,
         main,
-        lazy,
+        onDemand,
         available,
         session,
         isReady: () => readyOf(),
@@ -477,7 +482,7 @@ export function startSteam() {
 
     STEAM_USERS.forEach((creds, i) => {
         const { account, logOn, setup } = createAccount(creds, i == 0);
-        const start = account.lazy ? setup : logOn;
+        const start = account.onDemand ? setup : logOn;
         if(i == 0) start();
         else setTimeout(start, i * EXTRA_LOGIN_GAP_MS);
     });

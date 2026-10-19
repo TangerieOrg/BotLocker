@@ -53,7 +53,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     });
     budget.push("GC fetches in the last 24h, per account");
 
-    const gcServices = accounts.map(x => `${x.username} GC connected: ${x.isReady() ? "yes" : x.lazy ? "no (on demand)" : "no"}`);
+    const gcServices = accounts.map(x => `${x.username} GC connected: ${x.isReady() ? "yes" : x.onDemand ? "no (on demand)" : "no"}`);
 
     const failures = summary.failures.length
         ? summary.failures.map(x => `\`${x.match_id}\` ${x.last_error ?? "unknown"} (${x.attempts} tries)`).join("\n")
