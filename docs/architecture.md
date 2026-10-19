@@ -31,7 +31,7 @@ A missing `DISCORD_TOKEN`, `CHANNEL_ID` or `STEAM_USERS`, or a bad channel, call
 | `tracker/` | `TrackerStore`, `effects.ts` (when to check whose history), `history.ts` (`syncHistory` and backfill) |
 | `announce/` | `effects.ts` (posting unannounced matches, holding for party mates) and `embed.ts` (building the embed) |
 | `salts/` | `effects.ts`, the whole salt pipeline |
-| `deadlock/` | deadlock-api HTTP: `assets.ts` (hero and rank names, icons, cached for 24h), `history.ts` (archived history for backfill), `salts.ts` (metadata check, stored salts, upload) |
+| `deadlock/` | deadlock-api HTTP: `assets.ts` (hero and rank names, icons, cached for 24h), `history.ts` (archived history for backfill), `salts.ts` (stored salts read, upload) |
 | `db/` | SQLite access, re-exported from `db/mod.ts` |
 | `discord/` | Client, command loader, `commands/*.ts`, the presence rotation, mentions, guard DMs, embed helpers, `isOwner` |
 | `lines/` | All the roast and praise text pools, plus the logic for picking and filling them |

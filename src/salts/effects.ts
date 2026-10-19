@@ -1,6 +1,6 @@
 import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
-import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, seedSalts, setSaltStatus } from "../db/salts.ts";
-import { ApiError, getKnownMatches, getStoredSalts, uploadSalts } from "../deadlock/salts.ts";
+import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
+import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
 import { getAccounts, type SteamAccount } from "../steam/client.ts";
@@ -13,10 +13,7 @@ const TICK_MS = 60 * 1000;
 const SEED_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const RECHECK_INTERVAL_S = 24 * 60 * 60;
 const CHECK_BATCH = 100;
-// deadlock-api allows 30 of these a minute
 const CHECK_GAP_MS = 2100;
-// Their salt reads from the database allow 100 a second
-const SALT_READ_CONCURRENCY = 10;
 const UPLOAD_BATCH = 50;
 const MAX_ATTEMPTS = 5;
 const RETRY_BASE_S = 10 * 60;
@@ -50,16 +47,12 @@ async function seed() {
     if(added > 0) log(`Queued ${added} stored matches for salts`);
 }
 
-async function checkRow(row : SaltRow, known : Set<number>) {
-    if(!known.has(row.match_id)) return await setSaltStatus(row.match_id, "missing");
-
-    // Keeping their salts is a bonus, covered either way
-    const salts = await getStoredSalts(row.match_id).catch(() => undefined);
-    const stored = salts && hasSalt(salts);
-    await setSaltStatus(row.match_id, "covered", stored ? salts : undefined, stored ? "deadlock-api" : undefined);
+async function checkRow(row : SaltRow, salts : Salts | undefined) {
+    if(!salts) return await setSaltStatus(row.match_id, "missing");
+    await setSaltStatus(row.match_id, "covered", salts, "deadlock-api");
 }
 
-// Asks deadlock-api which matches it has, working through everything unchecked in one go.
+// Asks deadlock-api which matches it has salts for, working through everything unchecked in one go.
 // Only ever reads, so it runs even with uploading off
 async function runChecks() {
     while(true) {
@@ -68,10 +61,8 @@ async function runChecks() {
         if(rows.length == 0) return;
 
         try {
-            const known = await getKnownMatches(rows.map(x => x.match_id));
-            for(let i = 0; i < rows.length; i += SALT_READ_CONCURRENCY) {
-                await Promise.all(rows.slice(i, i + SALT_READ_CONCURRENCY).map(x => checkRow(x, known)));
-            }
+            const found = await getStoredSaltsFor(rows.map(x => x.match_id));
+            for(const x of rows) await checkRow(x, found.get(x.match_id));
         } catch(err) {
             apiFailed(err);
             return;
@@ -94,12 +85,13 @@ async function recheckMissing() : Promise<boolean> {
         const rows = page.filter(x => !inFlight.has(x.match_id));
 
         try {
-            const known = await getKnownMatches(rows.map(x => x.match_id));
-            const have = rows.filter(x => known.has(x.match_id));
-            for(let i = 0; i < have.length; i += SALT_READ_CONCURRENCY) {
-                await Promise.all(have.slice(i, i + SALT_READ_CONCURRENCY).map(x => checkRow(x, known)));
+            const found = await getStoredSaltsFor(rows.map(x => x.match_id));
+            for(const x of rows) {
+                const salts = found.get(x.match_id);
+                if(!salts) continue;
+                await checkRow(x, salts);
+                covered++;
             }
-            covered += have.length;
         } catch(err) {
             apiFailed(err);
             return false;
@@ -140,24 +132,29 @@ async function pickMissing() : Promise<SaltRow | undefined> {
         const rows = (await dueRows("missing", CHECK_BATCH + inFlight.size)).filter(x => !inFlight.has(x.match_id)).slice(0, CHECK_BATCH);
         if(rows.length == 0) return;
 
-        let known;
-        try {
-            known = await getKnownMatches(rows.map(x => x.match_id));
-        } catch(err) {
-            apiFailed(err);
-            return;
-        }
-        for(const x of rows) {
-            if(!known.has(x.match_id)) continue;
-            await checkRow(x, known);
-            log(`${x.match_id} is on deadlock-api now, skipping the GC fetch`);
-        }
+        // A few at a time, so a match that really lacks its salts is found without reading all 100
+        for(let i = 0; i < rows.length; i += SALT_READ_CONCURRENCY) {
+            const chunk = rows.slice(i, i + SALT_READ_CONCURRENCY);
+            let found;
+            try {
+                found = await getStoredSaltsFor(chunk.map(x => x.match_id));
+            } catch(err) {
+                apiFailed(err);
+                return;
+            }
+            for(const x of chunk) {
+                const salts = found.get(x.match_id);
+                if(!salts) continue;
+                await checkRow(x, salts);
+                log(`${x.match_id} has salts on deadlock-api now, skipping the GC fetch`);
+            }
 
-        // Nothing awaits between this find and the claim, so two accounts can't take the same match
-        const row = rows.find(x => !known.has(x.match_id) && !inFlight.has(x.match_id));
-        if(row) {
-            inFlight.add(row.match_id);
-            return row;
+            // Nothing awaits between this find and the claim, so two accounts can't take the same match
+            const row = chunk.find(x => !found.has(x.match_id) && !inFlight.has(x.match_id));
+            if(row) {
+                inFlight.add(row.match_id);
+                return row;
+            }
         }
     }
 }

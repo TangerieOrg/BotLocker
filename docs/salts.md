@@ -7,14 +7,14 @@ Salts let deadlock-api download a match's metadata and replay. BotLocker contrib
 Each stored match has one row in `match_salts`. `insertMatches` creates it, and `seedSalts` runs every 3h to catch any match that's missing one. A row is due once `salt_check_after` (match end + `SALT_DELAY_MS`, default 30m) has passed. The delay gives deadlock-api's own ingest time to get the match first.
 
 ```
-pending ──deadlock-api has it──▶ covered            (salts saved if deadlock-api returns them)
-   └─────doesn't have it───────▶ missing ──GC fetch──▶ fetched ──upload──▶ uploaded
+pending ──deadlock-api has its salts──▶ covered            (salts saved)
+   └─────doesn't have them───────────▶ missing ──GC fetch──▶ fetched ──upload──▶ uploaded
                                      └── retries with backoff, failed after 5 attempts or a GC InvalidMatch/InvalidPermission
 ```
 
-- **Checks** (`runChecks`) query deadlock-api metadata for 100 rows at a time, at most 30 queries a minute. These are read-only, so they still run when `SALT_UPLOAD=0`.
-- **Recheck** (`recheckMissing`) runs on the first tick after startup and then every 24h. It pages through every `missing` row, due or not, asks deadlock-api about them and marks the ones it has as `covered`. If deadlock-api errors mid-way it retries on a later tick.
-- **Fetches** (`fetchLoop`, one loop per Steam account, started only when `account.available()`) send one GC salt request per `SALT_FETCH_INTERVAL_MS` (30m), up to `SALT_FETCH_DAILY_CAP` (40) per rolling 24h per account. `inFlight` stops two accounts from taking the same match. On-demand (`|lazy`) accounts run the request inside `account.session`, so they only log in once `pickMissing` has found something to fetch. Before each request `pickMissing` asks deadlock-api about the next 100 due `missing` rows. Any it has picked up since are marked `covered` (like a normal check) and skipped, so only matches it really lacks spend the allowance. If deadlock-api errors, no GC request goes out that round.
+- **Checks** (`runChecks`) read the stored salts from deadlock-api for 100 rows at a time (`getStoredSaltsFor`, one `GET /{id}/salts?disable_steam=true` per match, 10 at a time, which never goes to Steam). A row is `covered` only if deadlock-api has a salt for it. Having the match's metadata doesn't count, because we can fetch that ourselves from a salt. A failed read throws and pauses checks, so an error is never taken for "no salt". These are read-only, so they still run when `SALT_UPLOAD=0`.
+- **Recheck** (`recheckMissing`) runs on the first tick after startup and then every 24h. It pages through every `missing` row, due or not, asks deadlock-api for their salts and marks the ones it has as `covered`. If deadlock-api errors mid-way it retries on a later tick.
+- **Fetches** (`fetchLoop`, one loop per Steam account, started only when `account.available()`) send one GC salt request per `SALT_FETCH_INTERVAL_MS` (30m), up to `SALT_FETCH_DAILY_CAP` (40) per rolling 24h per account. `inFlight` stops two accounts from taking the same match. On-demand (`|lazy`) accounts run the request inside `account.session`, so they only log in once `pickMissing` has found something to fetch. Before each request `pickMissing` reads stored salts for the next due `missing` rows, 10 at a time, until it finds one deadlock-api still lacks. Any it has salts for since are marked `covered` (like a normal check) and skipped, so only matches it really lacks spend the allowance. If deadlock-api errors, no GC request goes out that round.
 - **Uploads** (`runUploads`) send batches of up to 50, grouped by the account that fetched them. The uploader is credited as `botlocker:<account id>` from `source = "gc:<id>"`. If deadlock-api returns 400, the batch is split up to find the bad entry.
 - Due rows are ordered so that "live" matches (ended within the last 6h) go first, then the backlog from oldest to newest.
 
