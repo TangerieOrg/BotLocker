@@ -121,7 +121,8 @@ export async function recordFetch(at : number, username? : string) {
     await setKv(logKey(username), JSON.stringify([...await getFetchLog(at, username), at]));
 }
 
-// Steam rate limited the account, so its whole 24h allowance counts as spent from now
-export async function exhaustFetchLog(at : number, cap : number, username? : string) {
-    await setKv(logKey(username), JSON.stringify(Array<number>(cap).fill(at)));
+// Steam rate limited the account, so its whole allowance counts as spent until pauseS from now.
+// Dated so they age out of the 24h window right when the pause ends, which can be in the future
+export async function exhaustFetchLog(at : number, cap : number, pauseS : number, username? : string) {
+    await setKv(logKey(username), JSON.stringify(Array<number>(cap).fill(at + pauseS - DAY_S)));
 }

@@ -1,4 +1,4 @@
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../config.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_RATE_LIMIT_PAUSE_S, SALT_UPLOAD } from "../config.ts";
 import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
@@ -203,9 +203,9 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
             }
             break;
         case GcResult.RateLimited:
-            // Same as deadlock-api-ingest: Steam's limit doesn't clear in hours, so the whole 24h allowance is spent
-            await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, logUser(account));
-            error(`GC rate limited salt fetching on ${account.username}, nothing more from it for 24h`);
+            // Like deadlock-api-ingest: Steam's limit doesn't clear in hours, so the account sits out the whole pause
+            await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, SALT_RATE_LIMIT_PAUSE_S, logUser(account));
+            error(`GC rate limited salt fetching on ${account.username}, nothing more from it for ${SALT_RATE_LIMIT_PAUSE_S / 3600}h`);
             break;
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
