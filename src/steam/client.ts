@@ -41,6 +41,8 @@ export interface SteamAccount {
     main: boolean;
     // Every extra account only logs in for a fetch (see session), main stays logged in
     onDemand: boolean;
+    // A |lazy personal account rather than a bot
+    personal: boolean;
     // Whether a fetch can start now. For a personal (|lazy) account that also means its owner isn't on Steam
     available(): boolean;
     // Runs fn with the game coordinator connected. On-demand accounts log in for it and out again after
@@ -290,6 +292,7 @@ function createAccount(creds : { username : string, password : string, lazy? : b
         username,
         main,
         onDemand,
+        personal: lazy,
         available,
         session,
         isReady: () => readyOf(),

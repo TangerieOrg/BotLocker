@@ -1,8 +1,8 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../../config.ts";
+import { SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../../config.ts";
 import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
-import { saltState } from "../../salts/effects.ts";
+import { fetchCapFor, saltState } from "../../salts/effects.ts";
 import { getAccounts } from "../../steam/client.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { isOwner } from "../util.ts";
@@ -42,8 +42,9 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const budget = accounts.map((account, i) => {
         const fetches = logs[i];
-        const parts = [`${account.username}: ${fetches.length}/${SALT_FETCH_DAILY_CAP}`];
-        if(fetches.length >= SALT_FETCH_DAILY_CAP) {
+        const cap = fetchCapFor(account);
+        const parts = [`${account.username}: ${fetches.length}/${cap}`];
+        if(fetches.length >= cap) {
             parts.push(`allowance spent (or rate limited), waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
         } else if(fetches.length > 0) {
             const nextSlot = Math.max(...fetches) + SALT_FETCH_INTERVAL_MS / 1000;

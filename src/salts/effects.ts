@@ -102,6 +102,11 @@ async function recheckMissing() : Promise<boolean> {
     return true;
 }
 
+// Trial: personal accounts have never been rate limited, so they alternate half and full gaps with the cap scaled to match
+const shortGapNext = new Set<string>();
+export const fetchCapFor = (account : SteamAccount) => account.personal ? Math.round(SALT_FETCH_DAILY_CAP * 4 / 3) : SALT_FETCH_DAILY_CAP;
+const gapFor = (account : SteamAccount) => shortGapNext.has(account.username) ? SALT_FETCH_INTERVAL_MS / 2 : SALT_FETCH_INTERVAL_MS;
+
 // Main's fetch log keeps the original key, the extras have their own
 const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
 
@@ -114,7 +119,7 @@ async function fetchLoop(account : SteamAccount) {
     while(true) {
         try {
             if(await fetchNext(account)) {
-                await sleep(SALT_FETCH_INTERVAL_MS);
+                await sleep(gapFor(account));
                 continue;
             }
         } catch(err) {
@@ -164,8 +169,8 @@ async function fetchNext(account : SteamAccount) {
     if(!SALT_UPLOAD || !account.available()) return false;
 
     const fetches = await getFetchLog(now(), logUser(account));
-    if(fetches.length >= SALT_FETCH_DAILY_CAP) return false;
-    if(fetches.length > 0 && now() - Math.max(...fetches) < SALT_FETCH_INTERVAL_MS / 1000) return false;
+    if(fetches.length >= fetchCapFor(account)) return false;
+    if(fetches.length > 0 && now() - Math.max(...fetches) < gapFor(account) / 1000) return false;
 
     const row = await pickMissing();
     if(!row) return false;
@@ -173,6 +178,7 @@ async function fetchNext(account : SteamAccount) {
     try {
         // On-demand accounts only log in now, after deadlock-api has confirmed there's something to fetch
         await account.session(() => fetchOne(account, row));
+        if(account.personal && !shortGapNext.delete(account.username)) shortGapNext.add(account.username);
     } finally {
         inFlight.delete(row.match_id);
     }
@@ -204,7 +210,7 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
             break;
         case GcResult.RateLimited:
             // Like deadlock-api-ingest: Steam's limit doesn't clear in hours, so the account sits out the whole pause
-            await exhaustFetchLog(now(), SALT_FETCH_DAILY_CAP, SALT_RATE_LIMIT_PAUSE_S, logUser(account));
+            await exhaustFetchLog(now(), fetchCapFor(account), SALT_RATE_LIMIT_PAUSE_S, logUser(account));
             error(`GC rate limited salt fetching on ${account.username}, nothing more from it for ${SALT_RATE_LIMIT_PAUSE_S / 3600}h`);
             break;
         case GcResult.InvalidMatch:
