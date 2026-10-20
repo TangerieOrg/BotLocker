@@ -1,4 +1,4 @@
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_RATE_LIMIT_PAUSE_S, SALT_UPLOAD } from "../config.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_PERSONAL_FETCH_INTERVAL_MS, SALT_RATE_LIMIT_PAUSE_S, SALT_UPLOAD } from "../config.ts";
 import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
@@ -102,10 +102,9 @@ async function recheckMissing() : Promise<boolean> {
     return true;
 }
 
-// Trial: personal accounts have never been rate limited, so they alternate half and full gaps with the cap scaled to match
-const shortGapNext = new Set<string>();
-export const fetchCapFor = (account : SteamAccount) => account.personal ? Math.round(SALT_FETCH_DAILY_CAP * 4 / 3) : SALT_FETCH_DAILY_CAP;
-const gapFor = (account : SteamAccount) => shortGapNext.has(account.username) ? SALT_FETCH_INTERVAL_MS / 2 : SALT_FETCH_INTERVAL_MS;
+// Personal accounts have never been rate limited, so they get a shorter gap and a cap scaled to match
+const gapFor = (account : SteamAccount) => account.personal ? SALT_PERSONAL_FETCH_INTERVAL_MS : SALT_FETCH_INTERVAL_MS;
+export const fetchCapFor = (account : SteamAccount) => Math.round(SALT_FETCH_DAILY_CAP * SALT_FETCH_INTERVAL_MS / gapFor(account));
 
 // Main's fetch log keeps the original key, the extras have their own
 const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
@@ -178,7 +177,6 @@ async function fetchNext(account : SteamAccount) {
     try {
         // On-demand accounts only log in now, after deadlock-api has confirmed there's something to fetch
         await account.session(() => fetchOne(account, row));
-        if(account.personal && !shortGapNext.delete(account.username)) shortGapNext.add(account.username);
     } finally {
         inFlight.delete(row.match_id);
     }
