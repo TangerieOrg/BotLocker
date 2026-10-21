@@ -276,7 +276,9 @@ function createAccount(creds : { username : string, password : string, lazy? : b
             return false;
         }
         warnedNotFriend = false;
-        return !s.online.has(self);
+        // A session plays Deadlock and Steam allows one running game per account, so only a game blocks it
+        const kind = activityFromStatus(s.online.get(self))?.kind;
+        return !kind || kind == "online";
     }
 
     // First run needs a login to learn its account id and (via Steam Guard) get a saved token, after that it stays logged out
