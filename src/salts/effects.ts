@@ -107,7 +107,7 @@ const TRIAL_SHORT_GAP_MS = 5 * 60 * 1000;
 const TRIAL_LONG_GAP_MS = 10 * 60 * 1000;
 const TRIAL_CAP = 192;
 const shortGapNext = new Set<string>();
-const gapFor = (account : SteamAccount) => !account.personal ? SALT_FETCH_INTERVAL_MS : shortGapNext.has(account.username) ? TRIAL_SHORT_GAP_MS : TRIAL_LONG_GAP_MS;
+export const gapFor = (account : SteamAccount) => !account.personal ? SALT_FETCH_INTERVAL_MS : shortGapNext.has(account.username) ? TRIAL_SHORT_GAP_MS : TRIAL_LONG_GAP_MS;
 export const fetchCapFor = (account : SteamAccount) => account.personal ? TRIAL_CAP : SALT_FETCH_DAILY_CAP;
 
 // Main's fetch log keeps the original key, the extras have their own

@@ -1,8 +1,8 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
-import { SALT_FETCH_INTERVAL_MS, SALT_UPLOAD } from "../../config.ts";
+import { SALT_UPLOAD } from "../../config.ts";
 import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
-import { fetchCapFor, saltState } from "../../salts/effects.ts";
+import { fetchCapFor, gapFor, saltState } from "../../salts/effects.ts";
 import { getAccounts } from "../../steam/client.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { isOwner } from "../util.ts";
@@ -47,7 +47,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         if(fetches.length >= cap) {
             parts.push(`allowance spent (or rate limited), waiting until ${when(Math.min(...fetches) + 24 * 60 * 60)}`);
         } else if(fetches.length > 0) {
-            const nextSlot = Math.max(...fetches) + SALT_FETCH_INTERVAL_MS / 1000;
+            const nextSlot = Math.max(...fetches) + gapFor(account) / 1000;
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
         }
         return parts.join(", ");
