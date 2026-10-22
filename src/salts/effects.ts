@@ -1,4 +1,4 @@
-import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_RATE_LIMIT_PAUSE_S, SALT_UPLOAD } from "../config.ts";
+import { SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_PERSONAL_FETCH_INTERVAL_MS, SALT_RATE_LIMIT_PAUSE_S, SALT_UPLOAD } from "../config.ts";
 import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
@@ -102,13 +102,9 @@ async function recheckMissing() : Promise<boolean> {
     return true;
 }
 
-// Trial: personal accounts have never been rate limited, so they alternate 5m and 10m gaps, with a cap of one per 7.5m
-const TRIAL_SHORT_GAP_MS = 5 * 60 * 1000;
-const TRIAL_LONG_GAP_MS = 10 * 60 * 1000;
-const TRIAL_CAP = 192;
-const shortGapNext = new Set<string>();
-export const gapFor = (account : SteamAccount) => !account.personal ? SALT_FETCH_INTERVAL_MS : shortGapNext.has(account.username) ? TRIAL_SHORT_GAP_MS : TRIAL_LONG_GAP_MS;
-export const fetchCapFor = (account : SteamAccount) => account.personal ? TRIAL_CAP : SALT_FETCH_DAILY_CAP;
+// Personal accounts have never been rate limited, so they get a shorter gap and a cap scaled to match
+export const gapFor = (account : SteamAccount) => account.personal ? SALT_PERSONAL_FETCH_INTERVAL_MS : SALT_FETCH_INTERVAL_MS;
+export const fetchCapFor = (account : SteamAccount) => Math.round(SALT_FETCH_DAILY_CAP * SALT_FETCH_INTERVAL_MS / gapFor(account));
 
 // Main's fetch log keeps the original key, the extras have their own
 const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
@@ -181,7 +177,6 @@ async function fetchNext(account : SteamAccount) {
     try {
         // On-demand accounts only log in now, after deadlock-api has confirmed there's something to fetch
         await account.session(() => fetchOne(account, row));
-        if(account.personal && !shortGapNext.delete(account.username)) shortGapNext.add(account.username);
     } finally {
         inFlight.delete(row.match_id);
     }
