@@ -2,7 +2,7 @@
     "tasks": {
         "dev": "SEND_DISCORD_MESSAGE=0 SALT_UPLOAD=0 deno run -A --watch src/main.ts",
         "start": "deno run -A src/main.ts",
-        "check": "deno check src/main.ts src/dbserver/main.ts src/discord/commands/*.ts"
+        "check": "deno check src/main.ts src/discord/commands/*.ts"
     },
     "imports": {
         "@db/sqlite": "jsr:@db/sqlite@^0.13.0",

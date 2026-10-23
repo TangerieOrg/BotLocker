@@ -21,7 +21,7 @@ deno lint
 
 ## Deploy
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the image on the server and restarts the `botlocker` compose project. The live container is `botlocker-bot-1`; use `docker logs -f botlocker-bot-1` to watch it. SQLite and Steam data live in the external `botlocker_botlocker-data` volume. The same project also runs `botlocker-db-1`, a read-only LAN-only SQLite endpoint; see "Reading the prod database" in `docs/data.md`.
+Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the image on the server and restarts the `botlocker` compose project. The live container is `botlocker-bot-1`; use `docker logs -f botlocker-bot-1` to watch it. SQLite and Steam data live in the external `botlocker_botlocker-data` volume. The bot also serves a read-only LAN-only SQLite endpoint; see "Reading the prod database" in `docs/data.md`.
 
 ## Architecture in brief
 

@@ -1,4 +1,5 @@
 import { startAnnouncer } from "./announce/effects.ts";
+import { startDbServer } from "./db/server.ts";
 import { startDiscord } from "./discord/client.ts";
 import { startGuardNotice } from "./discord/guard.ts";
 import { startPresence } from "./discord/presence.ts";
@@ -14,6 +15,7 @@ startAnnouncer();
 startGuardNotice();
 startPresence();
 startSalts();
+startDbServer();
 
 startSteam();
 await startDiscord();
