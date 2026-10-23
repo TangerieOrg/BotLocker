@@ -44,6 +44,6 @@ export const SALT_DELAY_S = (getNumber("SALT_DELAY_MS") ?? 30 * 60 * 1000) / 100
 export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 30 * 60 * 1000;
 export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 40;
 // |lazy personal accounts, their daily cap scales up by the same ratio
-export const SALT_PERSONAL_FETCH_INTERVAL_MS = getNumber("SALT_PERSONAL_FETCH_INTERVAL_MS") ?? 15 * 60 * 1000;
+export const SALT_PERSONAL_FETCH_INTERVAL_MS = getNumber("SALT_PERSONAL_FETCH_INTERVAL_MS") ?? 10 * 60 * 1000;
 // Steam's block outlasts a day, an account retried right at 24h got rate limited again
 export const SALT_RATE_LIMIT_PAUSE_S = (getNumber("SALT_RATE_LIMIT_PAUSE_H") ?? 30) * 60 * 60;
