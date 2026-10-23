@@ -49,7 +49,7 @@ Read these before changing the matching area:
 - `docs/tracking.md` covers Steam accounts and login, presence → match finished → history checks, backfill, and announcements with party holding
 - `docs/salts.md` covers the salt pipeline, its status values and the GC and deadlock-api rate limits
 - `docs/discord.md` covers slash commands, line pools, the rotating status and @mentions
-- `docs/data.md` covers reading prod (use the `/anthropic-skills:remote-sqlite` skill on `ws://192.168.1.171:8081`), the SQLite schema, `kv` keys and how the database layer is written
+- `docs/data.md` covers reading prod (use the `/anthropic-skills:remote-sqlite` skill on `ws://media/botlocker-db`), the SQLite schema, `kv` keys and how the database layer is written
 
 ## Conventions
 

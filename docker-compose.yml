@@ -14,7 +14,7 @@ services:
     secrets:
       - BotLockerEnv
 
-  # Read-only remote-sqlite endpoint for the database, bound to the LAN address only
+  # Read-only remote-sqlite endpoint for the database, behind Traefik, LAN only
   db:
     image: botlocker-bot:latest
     pull_policy: never
@@ -22,12 +22,24 @@ services:
     command: ["run", "-A", "--unstable-ffi", "src/dbserver/main.ts"]
     environment:
       - DATA_DIR=/data
-    ports:
-      - "192.168.1.171:8081:8080"
+    networks:
+      - traefik-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy"
+      - "traefik.http.routers.botlocker-db.entrypoints=web"
+      - "traefik.http.routers.botlocker-db.rule=Path(`/botlocker-db`) || PathPrefix(`/botlocker-db/`)"
+      - "traefik.http.routers.botlocker-db.middlewares=lan-only@file,stripprefix-botlocker-db"
+      - "traefik.http.middlewares.stripprefix-botlocker-db.stripprefix.prefixes=/botlocker-db"
+      - "traefik.http.services.botlocker-db.loadbalancer.server.port=8080"
     volumes:
       - botlocker-data:/data
     depends_on:
       - bot
+
+networks:
+  traefik-proxy:
+    external: true
 
 volumes:
   botlocker-data:
