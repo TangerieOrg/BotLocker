@@ -2,6 +2,10 @@
 
 Everything is in one SQLite file, `${DATA_DIR}/botlocker.sqlite3` (WAL). steam-user keeps its own files in `${DATA_DIR}/steam`. In prod, `DATA_DIR=/data` is a Docker volume.
 
+## Reading the prod database
+
+Don't `docker exec` into the bot to read prod. The `db` compose service (`src/dbserver/main.ts`, same image) serves the file read-only through `@tangerie/remote-sqlite`, bound to the LAN address only: `ws://192.168.1.171:8081`. Use the `/anthropic-skills:remote-sqlite` skill against that URL, for example `remote_sqlite.py ws://192.168.1.171:8081 tables`. It can't write. For a write, like resetting a `kv` key, use the `docker exec` route in `botlocker-bot-1`.
+
 ## Schema (`db/connection.ts`)
 
 | Table | Key | Notes |

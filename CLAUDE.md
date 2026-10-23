@@ -21,7 +21,7 @@ deno lint
 
 ## Deploy
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the image on the server and restarts the `botlocker` compose project. The live container is `botlocker-bot-1`; use `docker logs -f botlocker-bot-1` to watch it. SQLite and Steam data live in the external `botlocker_botlocker-data` volume.
+Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the image on the server and restarts the `botlocker` compose project. The live container is `botlocker-bot-1`; use `docker logs -f botlocker-bot-1` to watch it. SQLite and Steam data live in the external `botlocker_botlocker-data` volume. The same project also runs `botlocker-db-1`, a read-only LAN-only SQLite endpoint; see "Reading the prod database" in `docs/data.md`.
 
 ## Architecture in brief
 
@@ -49,7 +49,7 @@ Read these before changing the matching area:
 - `docs/tracking.md` covers Steam accounts and login, presence → match finished → history checks, backfill, and announcements with party holding
 - `docs/salts.md` covers the salt pipeline, its status values and the GC and deadlock-api rate limits
 - `docs/discord.md` covers slash commands, line pools, the rotating status and @mentions
-- `docs/data.md` covers the SQLite schema, `kv` keys and how the database layer is written
+- `docs/data.md` covers reading prod (use the `/anthropic-skills:remote-sqlite` skill on `ws://192.168.1.171:8081`), the SQLite schema, `kv` keys and how the database layer is written
 
 ## Conventions
 
