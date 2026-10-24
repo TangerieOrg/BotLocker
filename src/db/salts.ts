@@ -124,5 +124,17 @@ export async function recordFetch(at : number, username? : string) {
 // Steam rate limited the account, so its whole allowance counts as spent until pauseS from now.
 // Dated so they age out of the 24h window right when the pause ends, which can be in the future
 export async function exhaustFetchLog(at : number, cap : number, pauseS : number, username? : string) {
+    // The request that got limited is already in the log, so it isn't counted as a fetch
+    const fetched = Math.max((await getFetchLog(at, username)).length - 1, 0);
+    await setKv(limitKey(username), JSON.stringify({ at, fetched } satisfies RateLimitRecord));
     await setKv(logKey(username), JSON.stringify(Array<number>(cap).fill(at + pauseS - DAY_S)));
+}
+
+type RateLimitRecord = { at : number, fetched : number };
+const limitKey = (username? : string) => `salt_rate_limit${username ? `:${username}` : ""}`;
+
+// The last time Steam rate limited the account and how many salts it had fetched in the 24h before that
+export async function getRateLimit(username? : string) {
+    const raw = await getKv(limitKey(username));
+    return raw ? JSON.parse(raw) as RateLimitRecord : undefined;
 }

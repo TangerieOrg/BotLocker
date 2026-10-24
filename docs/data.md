@@ -24,6 +24,7 @@ There are no migrations. The schema is a `CREATE TABLE IF NOT EXISTS` block that
 | `steam_refresh_token`, `steam_refresh_token:<username>` | Saved Steam login for the main account and the extra accounts |
 | `backfilled:<account_id>` | The `BACKFILL_VERSION` this account was last backfilled at |
 | `salt_fetch_log`, `salt_fetch_log:<username>` | JSON array of GC salt request times (unix s) in the last 24h, for main and the extra accounts |
+| `salt_rate_limit`, `salt_rate_limit:<username>` | `{at, fetched}`: when Steam last rate limited the account and how many salts it had fetched in the 24h before, shown by `/status` |
 
 ## Writing DB code
 

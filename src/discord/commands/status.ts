@@ -1,6 +1,6 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { SALT_UPLOAD } from "../../config.ts";
-import { getFetchLog, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
+import { getFetchLog, getRateLimit, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
 import { fetchCapFor, gapFor, saltState } from "../../salts/effects.ts";
 import { getAccounts } from "../../steam/client.ts";
@@ -32,9 +32,10 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const at = now();
     const accounts = getAccounts();
-    const [summary, logs] = await Promise.all([
+    const [summary, logs, limits] = await Promise.all([
         getSaltSummary(at),
-        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username)))
+        Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username))),
+        Promise.all(accounts.map(x => getRateLimit(x.main ? undefined : x.username)))
     ]);
 
     const total = Object.values(summary.counts).reduce((a, b) => a + b, 0);
@@ -50,6 +51,8 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             const nextSlot = Math.max(...fetches) + gapFor(account) / 1000;
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
         }
+        const limit = limits[i];
+        if(limit) parts.push(`last rate limited ${when(limit.at)} after ${limit.fetched} fetched`);
         return parts.join(", ");
     });
     budget.push("GC fetches in the last 24h, per account");

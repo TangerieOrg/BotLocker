@@ -21,7 +21,7 @@ pending ──deadlock-api has its salts──▶ covered            (salts save
 
 ## Rate limits
 
-- The GC salt limit is tight and Valve doesn't publish it. The bot copies deadlock-api-ingest's behaviour: if the GC returns `RateLimited`, `exhaustFetchLog` fills that account's 24h log with entries dated to age out after `SALT_RATE_LIMIT_PAUSE_H` (default 30h, since an account retried at exactly 24h got rate limited again), so the account stops fetching until then. Fetch logs are stored in `kv` (`salt_fetch_log` for main, `salt_fetch_log:<username>` for the others), so the limits still apply after a restart.
+- The GC salt limit is tight and Valve doesn't publish it. The bot copies deadlock-api-ingest's behaviour: if the GC returns `RateLimited`, `exhaustFetchLog` fills that account's 24h log with entries dated to age out after `SALT_RATE_LIMIT_PAUSE_H` (default 30h, since an account retried at exactly 24h got rate limited again), so the account stops fetching until then. Fetch logs are stored in `kv` (`salt_fetch_log` for main, `salt_fetch_log:<username>` for the others), so the limits still apply after a restart. When a limit hits, `exhaustFetchLog` also stores how many fetches the account had made before it (`salt_rate_limit`), which `/status` shows per account.
 - A request that errors after leaving the bot still counts against the cap. "Not connected" errors don't count, because those requests never left.
 - Any deadlock-api error pauses checks and uploads for 5 minutes (`saltState.apiPausedUntil`).
 - On the main account, salt requests share the GC queue and the 2s spacing with history requests, but not history's 1h rate-limit pause. Extra accounts each have their own queue.
