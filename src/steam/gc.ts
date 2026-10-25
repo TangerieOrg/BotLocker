@@ -121,8 +121,9 @@ export interface MatchSaltResult {
 }
 
 // Salts are limited far harder than history, the caller keeps its own budget and handles a non-success result.
-// On the main account this shares the queue and spacing with history but not its rate limit pause
-export const getGcMatchSalts = (account : SteamAccount, matchId : number) => {
+// On the main account this shares the queue and spacing with history but not its rate limit pause.
+// targetAccountId names a player from the match, like the client does for its own matches
+export const getGcMatchSalts = (account : SteamAccount, matchId : number, targetAccountId? : number) => {
     const extra = account.main ? undefined : extraFor(account.username);
     return (extra?.queue ?? queue).run(async () : Promise<MatchSaltResult> => {
         const last = extra?.lastAt ?? lastAt;
@@ -130,7 +131,7 @@ export const getGcMatchSalts = (account : SteamAccount, matchId : number) => {
         if(extra) extra.lastAt = Date.now();
         else lastAt = Date.now();
 
-        const raw = await account.gcJob(METADATA_REQUEST, MetaRequest.encode(MetaRequest.create({ match_id: matchId })).finish());
+        const raw = await account.gcJob(METADATA_REQUEST, MetaRequest.encode(MetaRequest.create({ match_id: matchId, target_account_id: targetAccountId })).finish());
         const out = MetaResponse.toObject(MetaResponse.decode(raw), { longs: Number });
 
         return {

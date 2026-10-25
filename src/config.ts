@@ -42,10 +42,15 @@ export const PRESENCE_ROTATE_MS = getNumber("PRESENCE_ROTATE_MS") ?? 180000;
 export const SALT_UPLOAD = getBool("SALT_UPLOAD") ?? true;
 // Wait this long after a match ends so deadlock-api's own ingest gets there first, the game coordinator's salt limit is tight
 export const SALT_DELAY_S = (getNumber("SALT_DELAY_MS") ?? 30 * 60 * 1000) / 1000;
-// A faster cadence trips Steam's per-account limit sooner
-export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 30 * 60 * 1000;
-export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 40;
-// |lazy personal accounts, their daily cap scales up by the same ratio
-export const SALT_PERSONAL_FETCH_INTERVAL_MS = getNumber("SALT_PERSONAL_FETCH_INTERVAL_MS") ?? 10 * 60 * 1000;
+// Bot accounts get far less from Steam than real ones, so they stay well under the ~10 a day that used to trip it
+export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 3 * 60 * 60 * 1000;
+export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 8;
+// How long a rate limited bot waits before its next request, which doubles as the probe for whether the limit lifted
+export const SALT_RATE_LIMIT_PAUSE_S = (getNumber("SALT_RATE_LIMIT_PAUSE_H") ?? 6) * 60 * 60;
+// |lazy personal accounts. Fine for days at 15m, rate limited at 10m
+export const SALT_PERSONAL_FETCH_INTERVAL_MS = getNumber("SALT_PERSONAL_FETCH_INTERVAL_MS") ?? 15 * 60 * 1000;
+export const SALT_PERSONAL_FETCH_DAILY_CAP = getNumber("SALT_PERSONAL_FETCH_DAILY_CAP") ?? 96;
 // Steam's block outlasts a day, an account retried right at 24h got rate limited again
-export const SALT_RATE_LIMIT_PAUSE_S = (getNumber("SALT_RATE_LIMIT_PAUSE_H") ?? 30) * 60 * 60;
+export const SALT_PERSONAL_RATE_LIMIT_PAUSE_S = (getNumber("SALT_PERSONAL_RATE_LIMIT_PAUSE_H") ?? 30) * 60 * 60;
+// Trial: these accounts name a tracked player from the match as target_account_id in their salt requests
+export const SALT_TARGET_USERS = new Set((Deno.env.get("SALT_TARGET_USERS") ?? "").split(",").map(x => x.trim()).filter(x => x));

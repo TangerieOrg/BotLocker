@@ -47,6 +47,12 @@ export const insertMatches = asDbFunction((db, entries : MatchHistoryEntry[], an
         .length);
 });
 
+// A tracked player who was in the match, for naming them in a salt request
+export const getMatchPlayer = asDbFunction((db, matchId : number) => {
+    using stmt = db.prepare<{ account_id: number }>("SELECT account_id FROM matches WHERE match_id = ? LIMIT 1");
+    return stmt.get(matchId)?.account_id;
+});
+
 // Oldest first so streaks read in order when several land at once
 export const getUnannounced = asDbFunction(db => {
     using stmt = db.prepare<Match>("SELECT * FROM matches WHERE announced_at IS NULL ORDER BY match_id");
