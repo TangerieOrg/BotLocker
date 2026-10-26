@@ -2,7 +2,7 @@ import {
     SALT_FETCH_DAILY_CAP, SALT_FETCH_INTERVAL_MS, SALT_PERSONAL_FETCH_DAILY_CAP, SALT_PERSONAL_FETCH_INTERVAL_MS, SALT_PERSONAL_RATE_LIMIT_PAUSE_S,
     SALT_RATE_LIMIT_PAUSE_S, SALT_TARGET_USERS, SALT_UPLOAD
 } from "../config.ts";
-import { getMatchPlayer } from "../db/matches.ts";
+import { getMatchPlayers } from "../db/matches.ts";
 import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
@@ -189,7 +189,7 @@ async function fetchNext(account : SteamAccount) {
 }
 
 async function fetchOne(account : SteamAccount, row : SaltRow) {
-    const target = SALT_TARGET_USERS.has(account.username) ? await getMatchPlayer(row.match_id) : undefined;
+    const target = SALT_TARGET_USERS.has(account.username) ? (await getMatchPlayers(row.match_id))[0] : undefined;
     const tag = target ? `${account.username}, target ${target}` : account.username;
     let res;
     try {

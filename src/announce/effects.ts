@@ -1,13 +1,13 @@
 import type { GuildTextBasedChannel } from "discord.js";
 import { SemaphoreQueue } from "@tangerie/utils/queue";
 import { MAX_NOTIFY_AGE_S, SEND_DISCORD_MESSAGE } from "../config.ts";
-import { getUnannounced, markAnnounced, type Match } from "../db/mod.ts";
+import { getMatchPlayers, getUnannounced, markAnnounced, type Match } from "../db/mod.ts";
 import { DiscordStore } from "../discord/DiscordStore.ts";
 import { logger } from "../helpers/log.ts";
 import { now } from "../helpers/now.ts";
 import { watch } from "../helpers/store.ts";
 import { getUser, linkedAccounts } from "../links/LinkStore.ts";
-import { partyOf } from "../steam/SteamStore.ts";
+import { partyOf, SteamStore } from "../steam/SteamStore.ts";
 import { TrackerStore } from "../tracker/TrackerStore.ts";
 import { type Announced, buildEmbed, buildPartyEmbed } from "./embed.ts";
 
@@ -24,12 +24,14 @@ const flush = () => { queue.run(announcePending).catch(err => error(err)) };
 const heldSince = new Map<number, number>();
 let holdTimer : ReturnType<typeof setTimeout> | undefined;
 
-// Linked players in the same Steam party as this match's players who are still waiting on a history check
-function waitingOn(rows : Match[]) {
-    const have = new Set(rows.map(x => x.account_id));
+// Linked party mates of this match's players who don't have it stored yet and are still in a round or waiting on a
+// history check. One player's history can show the match before Steam says the others have left it
+async function waitingOn(matchId : number, rows : Match[]) {
+    const have = new Set(await getMatchPlayers(matchId));
     const parties = new Set(rows.map(x => partyOf(x.account_id)).filter(x => x));
     const { checks } = TrackerStore.get();
-    return [...linkedAccounts()].filter(id => !have.has(id) && checks.has(id) && parties.has(partyOf(id)));
+    const { inMatch } = SteamStore.get();
+    return [...linkedAccounts()].filter(id => !have.has(id) && (checks.has(id) || inMatch.has(id)) && parties.has(partyOf(id)));
 }
 
 // Who can actually be announced, the rest are just skipped (and still marked)
@@ -67,7 +69,7 @@ async function announcePending() {
 
     for(const [matchId, rows] of byMatch) {
         const since = heldSince.get(matchId) ?? Date.now();
-        const waiting = waitingOn(rows);
+        const waiting = await waitingOn(matchId, rows);
 
         if(waiting.length > 0 && Date.now() - since < HOLD_MS) {
             if(!heldSince.has(matchId)) log(`Holding match ${matchId} for party mates ${waiting.join(", ")}`);
