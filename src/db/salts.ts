@@ -121,16 +121,24 @@ export async function recordFetch(at : number, username? : string) {
     await setKv(logKey(username), JSON.stringify([...await getFetchLog(at, username), at]));
 }
 
+// Stores when Steam rate limited the account, how many it had fetched in the 24h before, and how many limits in a row
+// it has hit without a fetch in between. Read before exhaustFetchLog, which wipes the real fetches. Returns the streak
+export async function recordRateLimit(at : number, username? : string) {
+    // The request that got limited is already in the log, so it isn't counted as a fetch
+    const fetched = Math.max((await getFetchLog(at, username)).length - 1, 0);
+    const streak = fetched == 0 ? ((await getRateLimit(username))?.streak ?? 1) + 1 : 1;
+    await setKv(limitKey(username), JSON.stringify({ at, fetched, streak } satisfies RateLimitRecord));
+    return streak;
+}
+
 // Steam rate limited the account, so its whole allowance counts as spent until pauseS from now.
 // Dated so they age out of the 24h window right when the pause ends, which can be in the future
 export async function exhaustFetchLog(at : number, cap : number, pauseS : number, username? : string) {
-    // The request that got limited is already in the log, so it isn't counted as a fetch
-    const fetched = Math.max((await getFetchLog(at, username)).length - 1, 0);
-    await setKv(limitKey(username), JSON.stringify({ at, fetched } satisfies RateLimitRecord));
     await setKv(logKey(username), JSON.stringify(Array<number>(cap).fill(at + pauseS - DAY_S)));
 }
 
-type RateLimitRecord = { at : number, fetched : number };
+// Older records have no streak, they count as a first limit
+type RateLimitRecord = { at : number, fetched : number, streak? : number };
 const limitKey = (username? : string) => `salt_rate_limit${username ? `:${username}` : ""}`;
 
 // The last time Steam rate limited the account and how many salts it had fetched in the 24h before that

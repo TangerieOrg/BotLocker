@@ -3,7 +3,7 @@ import {
     SALT_RATE_LIMIT_PAUSE_S, SALT_TARGET_USERS, SALT_UPLOAD
 } from "../config.ts";
 import { getMatchPlayers } from "../db/matches.ts";
-import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
+import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, recordRateLimit, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
 import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
@@ -25,6 +25,7 @@ const RETRY_MAX_S = 6 * 60 * 60;
 const API_PAUSE_S = 5 * 60;
 // Matches that ended this recently count as live and go ahead of the backlog
 const LIVE_WINDOW_S = 6 * 60 * 60;
+const MAX_RATE_LIMIT_PAUSE_S = 48 * 60 * 60;
 
 export const saltState = {
     apiPausedUntil: 0,
@@ -109,7 +110,10 @@ async function recheckMissing() : Promise<boolean> {
 // Steam gives personal accounts far more than bots, so they get their own gap, cap and pause
 export const gapFor = (account : SteamAccount) => account.personal ? SALT_PERSONAL_FETCH_INTERVAL_MS : SALT_FETCH_INTERVAL_MS;
 export const fetchCapFor = (account : SteamAccount) => account.personal ? SALT_PERSONAL_FETCH_DAILY_CAP : SALT_FETCH_DAILY_CAP;
-const pauseFor = (account : SteamAccount) => account.personal ? SALT_PERSONAL_RATE_LIMIT_PAUSE_S : SALT_RATE_LIMIT_PAUSE_S;
+// A bot that's still limited when its pause ends waits twice as long each time, a fetch in between starts it over
+const pauseFor = (account : SteamAccount, streak : number) => account.personal
+    ? SALT_PERSONAL_RATE_LIMIT_PAUSE_S
+    : Math.min(SALT_RATE_LIMIT_PAUSE_S * 2 ** (streak - 1), MAX_RATE_LIMIT_PAUSE_S);
 
 // Main's fetch log keeps the original key, the extras have their own
 const logUser = (account : SteamAccount) => account.main ? undefined : account.username;
@@ -213,11 +217,14 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
                 await setSaltStatus(row.match_id, "failed", undefined, undefined, "GC returned no salts");
             }
             break;
-        case GcResult.RateLimited:
-            // Like deadlock-api-ingest: the account sits out the whole pause, its next request is the probe
-            await exhaustFetchLog(now(), fetchCapFor(account), pauseFor(account), logUser(account));
-            error(`GC rate limited salt fetching on ${tag}, nothing more from it for ${pauseFor(account) / 3600}h`);
+        // Like deadlock-api-ingest: the account sits out the whole pause, its next request is the probe
+        case GcResult.RateLimited: {
+            const streak = await recordRateLimit(now(), logUser(account));
+            const pause = pauseFor(account, streak);
+            await exhaustFetchLog(now(), fetchCapFor(account), pause, logUser(account));
+            error(`GC rate limited salt fetching on ${tag} (${streak} in a row), nothing more from it for ${pause / 3600}h`);
             break;
+        }
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
             await setSaltStatus(row.match_id, "failed", undefined, undefined, `GC result ${res.result}`);

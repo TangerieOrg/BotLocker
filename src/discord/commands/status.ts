@@ -52,7 +52,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             if(nextSlot > at) parts.push(`next slot ${when(nextSlot)}`);
         }
         const limit = limits[i];
-        if(limit) parts.push(`last rate limited ${when(limit.at)} after ${limit.fetched} fetched`);
+        if(limit) parts.push(`last rate limited ${when(limit.at)} after ${limit.fetched} fetched${(limit.streak ?? 1) > 1 ? ` (${limit.streak} in a row)` : ""}`);
         return parts.join(", ");
     });
     budget.push("GC fetches in the last 24h, per account");
