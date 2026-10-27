@@ -148,10 +148,25 @@ function createAccount(creds : { username : string, password : string, lazy? : b
         }
     });
 
+    // steam-user's own relogin can stall without an error, main once sat logged out for 1h40m after a NoConnection drop.
+    // logOff clears whatever it was stuck on, so logOn can start clean
+    let reloginTimer : ReturnType<typeof setTimeout> | undefined;
+    function watchRelogin() {
+        clearTimeout(reloginTimer);
+        reloginTimer = setTimeout(() => {
+            if(["loggedOn", "guard", "failed"].includes(loginOf().state)) return;
+            error(`${tag} still isn't back after ${RELOGIN_MS / 60000}m, logging in again`);
+            client.logOff();
+            logOn();
+            watchRelogin();
+        }, RELOGIN_MS);
+    }
+
     client.on("disconnected", (_result, msg) => {
         log(`${tag} disconnected (${msg}), will reconnect`);
         setReady(false);
         setLoginState(loggedOut);
+        if(!onDemand) watchRelogin();
     });
 
     // Only fired when steam-user gives up, e.g. a bad login or the account being used elsewhere
