@@ -8,6 +8,7 @@
 - Main account state is at the top level of `SteamStore` (`login`, `self`, `gcReady`). Extra accounts are in `SteamStore.bots`, keyed by username. The `main ? setLogin(...) : setBot(...)` pattern in `createAccount` hides the difference.
 - Login tries the saved refresh token from `kv` first. If Steam asks for a Steam Guard code, the bot uses stdin when there's a terminal. Otherwise the login state becomes `{ state: "guard", submit }`. `discord/guard.ts` DMs the owner, and `/steamguard` calls `submit`.
 - Main relies on steam-user's `autoRelogin` after a disconnect, but that can stall without an error (it once sat logged out for 1h40m after a `NoConnection` drop). So if main isn't logged on again within 5m, `watchRelogin` calls `logOff` and `logOn` itself, and repeats every 5m until it is.
+- Steam stops showing main as in Deadlock after a long session, so every 6h (`MAIN_REFRESH_MS`) main logs off and straight back on. GC requests pause for those few seconds.
 - `gcReady` becomes true once the GC answers the hello loop. GC requests only work while it's true, and the tracker's runner stops arming timers while it's false.
 
 ## Presence → "finished a match"

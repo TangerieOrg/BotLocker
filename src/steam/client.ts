@@ -20,6 +20,9 @@ const HELLO_INTERVAL_MS = 5000;
 const JOB_TIMEOUT_MS = 15000;
 const TOKEN_KEY = "steam_refresh_token";
 const RELOGIN_MS = 5 * 60 * 1000;
+// Steam stops showing main as in Deadlock after a long session, a fresh login brings it back
+const MAIN_REFRESH_MS = 6 * 60 * 60 * 1000;
+const MAIN_REFRESH_GAP_MS = 5000;
 const RICH_PRESENCE_POLL_MS = 30 * 1000;
 // Spread the extra accounts out so Steam doesn't throttle a burst of logins
 export const EXTRA_LOGIN_GAP_MS = 5000;
@@ -161,6 +164,13 @@ function createAccount(creds : { username : string, password : string, lazy? : b
             watchRelogin();
         }, RELOGIN_MS);
     }
+
+    if(main) setInterval(() => {
+        if(loginOf().state != "loggedOn") return;
+        log(`Refreshing the ${tag} session so Steam shows it in Deadlock`);
+        client.logOff();
+        setTimeout(logOn, MAIN_REFRESH_GAP_MS);
+    }, MAIN_REFRESH_MS);
 
     client.on("disconnected", (_result, msg) => {
         log(`${tag} disconnected (${msg}), will reconnect`);
