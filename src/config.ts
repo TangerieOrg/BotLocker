@@ -47,9 +47,9 @@ export const SALT_FETCH_INTERVAL_MS = getNumber("SALT_FETCH_INTERVAL_MS") ?? 3 *
 export const SALT_FETCH_DAILY_CAP = getNumber("SALT_FETCH_DAILY_CAP") ?? 8;
 // How long a rate limited bot waits before its next request, which doubles as the probe for whether the limit lifted
 export const SALT_RATE_LIMIT_PAUSE_S = (getNumber("SALT_RATE_LIMIT_PAUSE_H") ?? 6) * 60 * 60;
-// |lazy personal accounts. Fine for days at 15m, rate limited at 10m
+// |lazy personal accounts. Rate limited after 40-50 a day lately whatever the gap, so the cap stops it short of that
 export const SALT_PERSONAL_FETCH_INTERVAL_MS = getNumber("SALT_PERSONAL_FETCH_INTERVAL_MS") ?? 15 * 60 * 1000;
-export const SALT_PERSONAL_FETCH_DAILY_CAP = getNumber("SALT_PERSONAL_FETCH_DAILY_CAP") ?? 96;
+export const SALT_PERSONAL_FETCH_DAILY_CAP = getNumber("SALT_PERSONAL_FETCH_DAILY_CAP") ?? 40;
 // Steam's block outlasts a day, an account retried right at 24h got rate limited again
 export const SALT_PERSONAL_RATE_LIMIT_PAUSE_S = (getNumber("SALT_PERSONAL_RATE_LIMIT_PAUSE_H") ?? 30) * 60 * 60;
 // Trial: these accounts name a tracked player from the match as target_account_id in their salt requests
