@@ -35,15 +35,15 @@ export const seedSalts = asDbFunction(db => {
     return stmt.run(SALT_DELAY_S);
 });
 
-// Matches that just ended go first, then the backlog from oldest, so the ones whose salts expire first aren't left to last
-export const getDueSalts = asDbFunction((db, status : SaltStatus, limit : number, at : number, liveSince : number) => {
+// One queue, oldest first, so the ones whose salts expire first aren't left to last
+export const getDueSalts = asDbFunction((db, status : SaltStatus, limit : number, at : number) => {
     using stmt = db.prepare<SaltRow>(`--sql
         SELECT * FROM match_salts
         WHERE status = ? AND salt_check_after <= ? AND next_attempt_at <= ?
-        ORDER BY (match_end_time >= ?) DESC, match_end_time ASC
+        ORDER BY match_end_time ASC
         LIMIT ?
     `);
-    return stmt.all(status, at, at, liveSince, limit);
+    return stmt.all(status, at, at, limit);
 });
 
 // Every missing row after a match id, whether or not it's due, for sweeping the whole backlog in pages

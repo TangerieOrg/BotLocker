@@ -19,7 +19,7 @@ pending ──deadlock-api has its salts──▶ covered            (salts save
 - Personal (`|lazy`) accounts get far more from Steam and have their own `SALT_PERSONAL_FETCH_INTERVAL_MS` (15m), `SALT_PERSONAL_FETCH_DAILY_CAP` (40) and `SALT_PERSONAL_RATE_LIMIT_PAUSE_H` (30h). 15m once ran for days without a limit, and 10m and an alternating 5m/10m trial were both rate limited after about 7h. From 10-25 it was rate limited after 40 at 10m and after 50 at 15m, so the cap keeps it at 40 a day.
 - **Target trial**: accounts listed in `SALT_TARGET_USERS` set `target_account_id` on the request to a tracked player from the match (`getMatchPlayer`). deadlock-api-ingest and the mod manager only send `match_id`. Their log lines say `target <id>` so they can be compared against the accounts that don't.
 - **Uploads** (`runUploads`) send batches of up to 50, grouped by the account that fetched them. The uploader is credited as `botlocker:<account id>` from `source = "gc:<id>"`. If deadlock-api returns 400, the batch is split up to find the bad entry.
-- Due rows are ordered so that "live" matches (ended within the last 6h) go first, then the backlog from oldest to newest.
+- Due rows are one queue from oldest to newest, so a match that just ended waits behind the whole backlog (deadlock-api often has those by the time they come up).
 
 ## Rate limits
 

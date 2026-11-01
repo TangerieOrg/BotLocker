@@ -23,8 +23,6 @@ const MAX_ATTEMPTS = 5;
 const RETRY_BASE_S = 10 * 60;
 const RETRY_MAX_S = 6 * 60 * 60;
 const API_PAUSE_S = 5 * 60;
-// Matches that ended this recently count as live and go ahead of the backlog
-const LIVE_WINDOW_S = 6 * 60 * 60;
 const MAX_RATE_LIMIT_PAUSE_S = 48 * 60 * 60;
 
 export const saltState = {
@@ -43,8 +41,7 @@ function apiFailed(err : unknown) {
     error(`deadlock-api trouble, backing off ${API_PAUSE_S / 60}m`, err);
 }
 
-const dueRows = (status : "pending" | "missing" | "fetched", limit : number) =>
-    getDueSalts(status, limit, now(), now() - LIVE_WINDOW_S);
+const dueRows = (status : "pending" | "missing" | "fetched", limit : number) => getDueSalts(status, limit, now());
 
 async function seed() {
     const added = await seedSalts();
