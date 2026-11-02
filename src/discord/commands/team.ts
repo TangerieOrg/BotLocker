@@ -5,6 +5,7 @@ import { formatPlayed, kda, PERIODS, pct, record, streaks, sum } from "../../hel
 import { getAccount } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
 import { interactive, periodRow, type View } from "../interactive.ts";
+import { displayName } from "../names.ts";
 
 // Street Brawl teams max out at 4, so a bigger group can only have played standard
 const STREET_BRAWL_MAX = 4;
@@ -112,7 +113,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             users.length > STREET_BRAWL_MAX ? [] : getTeamMatches(accountIds, since, true)
         ]);
 
-        const names = await Promise.all(users.map(async x => (await interaction.guild!.members.fetch(x.id).catch(() => undefined))?.displayName ?? x.displayName));
+        const names = await Promise.all(users.map(async x => await displayName(interaction.guild!, x.id) ?? x.displayName));
 
         if(standard.length == 0 && streetBrawl.length == 0) {
             return [errorEmbed("No Games Together", `${names.join(", ")} have no stored games on the same team (${period.label.toLowerCase()})`)];

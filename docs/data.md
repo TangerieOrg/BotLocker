@@ -13,9 +13,21 @@ Don't `docker exec` into the bot to read prod. The bot itself serves the file re
 | `links` | `user_id` | Discord user → `account_id` (unique). Mirrors `LinkStore`, which is the source of truth while the bot is running |
 | `matches` | `(account_id, match_id)` | One row per tracked player per match. `won` is 0/1. `badge` and `ranked_delta` are set only for ranked games. `announced_at` is NULL until the match is posted; backfilled rows are stored already announced |
 | `match_salts` | `match_id` | One row per match. `status` is one of `pending`, `missing`, `fetched`, `uploaded`, `covered` or `failed` (see `salts.md`) |
+| `heroes` | `id` | Hero name, codename (`class_name`, what rich presence uses) and icon from deadlock-api |
+| `ranks` | `tier` | Rank name from deadlock-api |
+| `discord_names` | `user_id` | Last known server display name of a linked user |
+| `steam_names` | `account_id` | Last known Steam persona name of a linked account (stored, not shown anywhere yet) |
 | `kv` | `key` | Small persistent state, listed below |
 
 There are no migrations. The schema is a `CREATE TABLE IF NOT EXISTS` block that runs on import, so a new column or table needs to work against the existing prod database. Add new tables to the block. For a new column, add an explicit `ALTER TABLE` that's safe to run twice. Editing the `CREATE TABLE` alone does nothing to an existing database.
+
+## Semi-static names (`db/names.ts`)
+
+Reads use SQLite, and the outside world only tops it up:
+
+- **Heroes and ranks** (`deadlock/assets.ts`): rows are upserted and never deleted, so old matches resolve even if deadlock-api drops or renames something. `startAssets` refreshes when the newest row is over 24h old (checked hourly), and an unknown hero id, codename or rank tier triggers a refresh too, at most once per 10 minutes, so new heroes show up the day they release. A failed fetch keeps the stored rows. On a first run with an empty table the first lookup waits for the API.
+- **Discord names** (`discord/names.ts`): an in-memory copy of `discord_names`, loaded on import. `displayName`/`displayNames` return the stored name and only call `members.fetch` for someone never seen. Names are refreshed by `startNameSync` (on ready, then hourly, for every linked user) and by anything holding a live member (slash commands, mentions, the announcer, `/stats`). There's no `guildMemberUpdate` listener because that needs the privileged members intent. A user who's no longer in the server (Discord's Unknown Member error) is deleted from the table, which also keeps them off the leaderboard and `/online`.
+- **Steam names** (`steam/names.ts`): `startSteamNames` writes the persona name of each linked account whenever it changes in `SteamStore.personas`.
 
 ## `kv` keys
 

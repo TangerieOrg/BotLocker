@@ -34,3 +34,29 @@ export interface LossTotals {
     losses: number;
     time_lost: number;
 }
+
+export interface HeroRow {
+    id: number;
+    name: string;
+    class_name: string | null;
+    icon_url: string | null;
+    updated_at: number;
+}
+
+export interface RankRow {
+    tier: number;
+    name: string;
+    updated_at: number;
+}
+
+export interface DiscordName {
+    user_id: string;
+    name: string;
+    updated_at: number;
+}
+
+export interface SteamName {
+    account_id: number;
+    name: string;
+    updated_at: number;
+}

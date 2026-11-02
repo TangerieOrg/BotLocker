@@ -3,6 +3,7 @@ import { SemaphoreQueue } from "@tangerie/utils/queue";
 import { MAX_NOTIFY_AGE_S, SEND_DISCORD_MESSAGE } from "../config.ts";
 import { getMatchPlayers, getUnannounced, markAnnounced, type Match } from "../db/mod.ts";
 import { DiscordStore } from "../discord/DiscordStore.ts";
+import { rememberName } from "../discord/names.ts";
 import { logger } from "../helpers/log.ts";
 import { now } from "../helpers/now.ts";
 import { watch } from "../helpers/store.ts";
@@ -46,6 +47,7 @@ async function eligible(channel : GuildTextBasedChannel, match : Match) : Promis
     const member = await channel.guild.members.fetch(userId).catch(() => undefined);
     if(!member) return void log(`Skipped match ${match.match_id}, <${userId}> isn't in ${channel.guild.name}`);
 
+    rememberName(userId, member.displayName);
     return { match, name: member.displayName };
 }
 

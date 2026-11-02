@@ -17,7 +17,7 @@ The usual pattern is "compute the wanted set, then act on `diffSet(cur, prev).ad
 ## Startup (`src/main.ts`)
 
 1. Importing modules has side effects. `db/connection.ts` creates the data dir and the schema with a top-level `await`, and `LinkStore` loads links from SQLite at import time.
-2. Effects start: `startFriends`, `startTracker`, `startAnnouncer`, `startGuardNotice`, `startPresence`, `startSalts`. They do nothing useful until the stores fill up. `startDbServer` also starts the read-only database endpoint (see `data.md`).
+2. Effects start: `startFriends`, `startTracker`, `startAnnouncer`, `startGuardNotice`, `startPresence`, `startNameSync`, `startSteamNames`, `startAssets`, `startSalts`. They do nothing useful until the stores fill up. `startDbServer` also starts the read-only database endpoint (see `data.md`).
 3. `startSteam()` logs in every `STEAM_USERS` account. The first account is `main` and stays logged in. The others are salt-only and on demand: 5s apart, each does a one-off setup login if it has no saved token or account id, and after that only logs in per fetch (see `tracking.md`).
 4. `startDiscord()` loads the slash commands and logs in. On ready it fetches `CHANNEL_ID`, registers the commands to that channel's guild only (and clears any global ones), then calls `setChannel`. Anything waiting on `DiscordStore.channel` (announcer, presence, guard DMs) starts at that point.
 
@@ -27,13 +27,13 @@ A missing `DISCORD_TOKEN`, `CHANNEL_ID` or `STEAM_USERS`, or a bad channel, call
 
 | Folder | What's there |
 |---|---|
-| `steam/` | `client.ts`: steam-user accounts, login and Steam Guard, the GC hello loop, `gcJob`, presence and rich presence polling, `addFriend`/`fetchPersona`. `gc.ts`: the protobuf GC requests (match history, salts) and their rate limiting. `friends.ts`: the auto-friend effect. `activity.ts`: turns presence into an `Activity` tier (match > queue > deadlock > game > online) |
+| `steam/` | `client.ts`: steam-user accounts, login and Steam Guard, the GC hello loop, `gcJob`, presence and rich presence polling, `addFriend`/`fetchPersona`. `gc.ts`: the protobuf GC requests (match history, salts) and their rate limiting. `friends.ts`: the auto-friend effect. `names.ts`: saves linked accounts' persona names. `activity.ts`: turns presence into an `Activity` tier (match > queue > deadlock > game > online) |
 | `tracker/` | `TrackerStore`, `effects.ts` (when to check whose history), `history.ts` (`syncHistory` and backfill) |
 | `announce/` | `effects.ts` (posting unannounced matches, holding for party mates) and `embed.ts` (building the embed) |
 | `salts/` | `effects.ts`, the whole salt pipeline |
-| `deadlock/` | deadlock-api HTTP: `assets.ts` (hero and rank names, icons, cached for 24h), `history.ts` (archived history for backfill), `salts.ts` (stored salts read, upload) |
+| `deadlock/` | deadlock-api HTTP: `assets.ts` (hero and rank names and icons, read from SQLite and topped up from the API daily), `history.ts` (archived history for backfill), `salts.ts` (stored salts read, upload) |
 | `db/` | SQLite access, re-exported from `db/mod.ts`. `server.ts` is the read-only remote-sqlite endpoint |
-| `discord/` | Client, command loader, `commands/*.ts`, the presence rotation, mentions, guard DMs, embed helpers, `isOwner` |
+| `discord/` | Client, command loader, `commands/*.ts`, the presence rotation, mentions, guard DMs, embed helpers, `isOwner`, `names.ts` (stored display names) and `nameSync.ts` |
 | `lines/` | All the roast and praise text pools, plus the logic for picking and filling them |
 | `links/` | `LinkStore` |
 | `helpers/` | Store helpers, `logger`, `now()` (unix seconds), the loss window, stats maths, Steam id conversion |

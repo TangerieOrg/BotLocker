@@ -93,6 +93,35 @@ await withDb(db => {
 
         CREATE INDEX IF NOT EXISTS match_salts_due ON match_salts (status, salt_check_after);
 
+        -- Names and icons cached from deadlock-api, upserted only so old matches always resolve
+        CREATE TABLE IF NOT EXISTS heroes (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            class_name TEXT,
+            icon_url TEXT,
+            updated_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS ranks (
+            tier INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
+        -- Last known server display name per linked Discord user
+        CREATE TABLE IF NOT EXISTS discord_names (
+            user_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
+        -- Last known Steam persona name per linked Deadlock account
+        CREATE TABLE IF NOT EXISTS steam_names (
+            account_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS kv (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL

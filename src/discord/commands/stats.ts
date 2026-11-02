@@ -5,6 +5,7 @@ import { formatPlayed, kda, PERIODS, pct, record, streaks, sum, topByWinRate } f
 import { getAccount, getUser } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed, formatDuration } from "../embeds.ts";
 import { interactive, periodRow, type View } from "../interactive.ts";
+import { displayName, rememberName } from "../names.ts";
 
 export const data = new SlashCommandBuilder()
     .setName("stats")
@@ -44,8 +45,8 @@ async function partnerLines(interaction : ChatInputCommandInteraction, accountId
     const partners = topByWinRate(await getPartnerStats(accountId, since, streetBrawl, heroId), x => x.games, x => x.wins);
     return await Promise.all(partners.map(async x => {
         const userId = getUser(x.account_id);
-        const member = userId ? await interaction.guild!.members.fetch(userId).catch(() => undefined) : undefined;
-        return `**${member?.displayName ?? "Unknown"}** - ${x.games} game${x.games == 1 ? "" : "s"} · ${x.wins}W - ${x.games - x.wins}L · ${pct(x.wins, x.games)} WR`;
+        const name = userId ? await displayName(interaction.guild!, userId) : undefined;
+        return `**${name ?? "Unknown"}** - ${x.games} game${x.games == 1 ? "" : "s"} · ${x.wins}W - ${x.games - x.wins}L · ${pct(x.wins, x.games)} WR`;
     }));
 }
 
@@ -111,8 +112,10 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         return await interaction.editReply({ embeds: [errorEmbed("Unknown Hero", "Pick a hero from the list as you type")] });
     }
 
+    // The server avatar needs the live member, so this one refreshes the stored name too
     const member = await interaction.guild!.members.fetch(user.id).catch(() => undefined);
-    const name = member?.displayName ?? user.displayName;
+    if(member) rememberName(user.id, member.displayName);
+    const name = member?.displayName ?? await displayName(interaction.guild!, user.id) ?? user.displayName;
     const icon = hero ? await heroIcon(hero.id) : undefined;
 
     const render = async ({ period : key } : { period : string }) : Promise<View> => {

@@ -1,6 +1,7 @@
 import { type Interaction, MessageFlags } from "discord.js";
 import type { Command } from "./command.ts";
 import { errorEmbed } from "./embeds.ts";
+import { rememberName } from "./names.ts";
 
 export const commands = new Map<string, Command>();
 
@@ -14,6 +15,8 @@ export async function loadCommands() {
 }
 
 export async function handleInteraction(interaction : Interaction) {
+    if(interaction.inGuild() && interaction.member && "displayName" in interaction.member) rememberName(interaction.user.id, interaction.member.displayName);
+
     if(interaction.isAutocomplete()) {
         await commands.get(interaction.commandName)?.autocomplete?.(interaction).catch(err => console.error(err));
     } else if(interaction.isChatInputCommand()) {

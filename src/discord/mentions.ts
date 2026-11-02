@@ -5,6 +5,7 @@ import { heroName, rankName } from "../deadlock/assets.ts";
 import { getAccount } from "../links/LinkStore.ts";
 import { getMentionLine, lossContext, matchContext } from "../lines/mod.ts";
 import { DiscordStore } from "./DiscordStore.ts";
+import { rememberName } from "./names.ts";
 
 // Replies when someone @s the bot, about their last game if it knows one
 export async function handleMention(msg : Message) {
@@ -14,6 +15,7 @@ export async function handleMention(msg : Message) {
     const accountId = getAccount(msg.author.id);
     const last = accountId != null ? await getLastMatch(accountId) : undefined;
     const name = msg.member?.displayName ?? msg.author.username;
+    if(msg.member) rememberName(msg.author.id, name);
 
     const line = getMentionLine(accountId != null && last ? {
         ...matchContext(last, await heroName(last.hero_id), last.match_mode == 4 && last.badge ? await rankName(last.badge) : undefined),

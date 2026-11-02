@@ -1,13 +1,5 @@
-import type { ChatInputCommandInteraction, Client, Guild, GuildMember } from "discord.js";
+import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { OWNER_ID } from "../config.ts";
-
-export async function fetchMembers(guild : Guild, userIds : string[]) {
-    const members = new Map<string, GuildMember>();
-    await Promise.all(userIds.map(id =>
-        guild.members.fetch(id).then(x => members.set(id, x)).catch(() => undefined)
-    ));
-    return members;
-}
 
 // Bot application owner, or OWNER_ID if set
 export async function isOwner(interaction : ChatInputCommandInteraction) {

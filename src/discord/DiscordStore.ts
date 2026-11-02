@@ -1,5 +1,6 @@
 import type { GuildTextBasedChannel } from "discord.js";
 import { createStore } from "@tangerie/global-store/store";
+import { displayName } from "./names.ts";
 
 interface DiscordState {
     // The notify channel, set once the bot has logged in and found it. Its guild is the only one the bot works in
@@ -20,6 +21,6 @@ export const { setChannel, setStatus } = DiscordStore.actions;
 
 // Their name in the server, for places without a member to hand (bot status)
 export async function memberName(userId : string) {
-    const member = await DiscordStore.get().channel?.guild.members.fetch(userId).catch(() => undefined);
-    return member?.displayName ?? "someone";
+    const guild = DiscordStore.get().channel?.guild;
+    return (guild && await displayName(guild, userId)) ?? "someone";
 }

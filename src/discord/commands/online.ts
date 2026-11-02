@@ -6,7 +6,7 @@ import { LinkStore } from "../../links/LinkStore.ts";
 import { getMatchStatusLine, getOnlineStatusLine, getQueueStatusLine, joinNames, lossContext } from "../../lines/mod.ts";
 import { groupByParty, modeLabel, onlinePlayers, type Player } from "../../steam/activity.ts";
 import { COLOURS } from "../embeds.ts";
-import { fetchMembers } from "../util.ts";
+import { displayNames } from "../names.ts";
 
 export const data = new SlashCommandBuilder()
     .setName("online")
@@ -32,8 +32,8 @@ export async function execute(interaction : ChatInputCommandInteraction) {
     const hours = interaction.options.getInteger("hours") ?? 3;
     const since = Date.now() / 1000 - hours * 60 * 60;
 
-    const members = await fetchMembers(interaction.guild!, [...LinkStore.get().links.keys()]);
-    const name = (x : Player) => members.get(x.userId)!.displayName;
+    const members = await displayNames(interaction.guild!, [...LinkStore.get().links.keys()]);
+    const name = (x : Player) => members.get(x.userId)!;
     const players = onlinePlayers().filter(x => members.has(x.userId));
     const tier = (kind : Player["activity"]["kind"]) => players.filter(x => x.activity.kind == kind);
     const lossesOf = async (x : Player) => lossContext(await getLossTotals(x.accountId, lossWindowStart()));
@@ -85,7 +85,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     if(recent.length > 0) {
         const lines = await Promise.all(recent.map(async x =>
-            `**${members.get(x.userId)!.displayName}** ${x.match!.won ? "won" : "lost"} as ${await heroName(x.match!.hero_id)} <t:${x.match!.start_time}:R>`
+            `**${members.get(x.userId)!}** ${x.match!.won ? "won" : "lost"} as ${await heroName(x.match!.hero_id)} <t:${x.match!.start_time}:R>`
         ));
         sections.push(`**Played in the Last ${hours}h**\n${lines.join("\n")}`);
     }
