@@ -22,12 +22,12 @@ const queue = new SemaphoreQueue(INGEST_CONCURRENCY);
 let lastSeed = 0;
 
 async function seed() {
-    lastSeed = Date.now();
     try {
         const added = await seedIngest(await getMetadataSalts());
+        lastSeed = Date.now();
         if(added > 0) log(`Queued ${added} matches`, await countIngest());
     } catch(err) {
-        // The bot being down or redeploying just means trying again next poll
+        // Both containers start together on a deploy, so the bot often isn't serving yet. Tried again on the next idle tick
         error("Couldn't read salts from the bot", message(err));
     }
 }

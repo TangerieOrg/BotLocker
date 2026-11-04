@@ -23,7 +23,7 @@ bot match_salts (ws://bot:8080) ──▶ ingest table ──▶ http://replay{c
   - Every `POLL_INTERVAL_MS` it pulls every `match_salts` row with a metadata salt (a few thousand rows, read whole) and inserts the new ones as `pending`.
   - It then works through due rows newest first, `INGEST_CONCURRENCY` at a time.
   - A failure backs off from 10m doubling up to 24h, and becomes `failed` after 5 attempts.
-  - Not reaching the bot (redeploys) is logged and retried next poll.
+  - Not reaching the bot (it starts alongside on a deploy) is logged and retried a minute later.
 - **`meta/fetch.ts`:** the files keep the `.bz2` name but newer ones are zstd, so the format is picked by magic bytes. zstd goes through `node:zlib`, bzip2 through `seek-bzip`.
 - **`meta/proto.ts`:** an inline subset of `citadel_gcmessages_common.proto` (SteamDatabase/Protobufs), the same approach as `src/steam/gc.ts`. Add fields there when a new analysis needs them. Old matches can only gain them by being re-ingested; set their `ingest.status` back to `pending`, since `saveMeta` replaces a match's rows.
 - **`db/server.ts`:** serves `replays.sqlite3` read-only on `DB_PORT`. Traefik routes it at `/botlocker-replays` with `lan-only@file`, so it's `ws://media/botlocker-replays`.
