@@ -3,8 +3,9 @@ import { BOT_DB, findAccount, loadNames, matchFilter, openSource, REPLAYS_DB } f
 
 const USAGE = `Time spent dead from match metadata
 
-deno task dead [--account <id|name>] [--days N] [--mode unranked|ranked|brawl] [--db url|path] [--bot url|path]
+deno task dead [--account <id|name>] [--days N] [--mode standard|ranked|unranked|brawl] [--db url|path] [--bot url|path]
 
+--mode defaults to standard (normal matches, ranked or not), Street Brawl is only included with --mode brawl.
 Without --account, one line per linked player. With it, a per hero breakdown and the last 15 matches`;
 
 const args = parseArgs(Deno.args, { string: ["account", "mode", "db", "bot"], boolean: ["help"], alias: { h: "help", a: "account", d: "days" } });

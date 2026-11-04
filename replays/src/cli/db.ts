@@ -1,6 +1,7 @@
 import { Database } from "@db/sqlite";
 import { RemoteDatabase } from "@tangerie/remote-sqlite/client";
 import "../env.ts";
+import type { Era } from "./maps.ts";
 
 type Params = Parameters<RemoteDatabase["run"]> extends [string, ...infer P] ? P : never;
 
@@ -57,6 +58,17 @@ export function findAccount(names : Names, query : string) {
     throw new Error(hits.length == 0 ? `No linked player matches "${query}"` : `"${query}" matches ${hits.map(x => x[1]).join(", ")}`);
 }
 
+// Comma separated, pooled together by the heatmaps
+export const findAccounts = (names : Names, query : string) => [...new Set(query.split(",").map(x => x.trim()).filter(x => x).map(x => findAccount(names, x)))];
+
+// Names for titles and file names, a long list collapses to a count
+export function playersLabel(names : Names, accounts : number[]) {
+    if(accounts.length > 3) return `${accounts.length} players`;
+    return accounts.map(x => names.linked.get(x) ?? String(x)).join(", ");
+}
+
+export const placeholders = (list : unknown[]) => list.map(() => "?").join(", ");
+
 export function findHero(names : Names, query : string) {
     if(/^\d+$/.test(query)) return Number(query);
     const q = query.toLowerCase();
@@ -65,25 +77,30 @@ export function findHero(names : Names, query : string) {
     return hit[0];
 }
 
-export const MODES : Record<string, [number, number]> = {
-    unranked: [1, 1],
-    ranked: [1, 4],
-    brawl: [4, 1]
+// standard is normal matches, ranked or not. Street Brawl is short and always kept apart from it
+export const MODES : Record<string, (alias : string) => string> = {
+    standard: a => `${a}.game_mode = 1`,
+    unranked: a => `${a}.game_mode = 1 AND ${a}.match_mode = 1`,
+    ranked: a => `${a}.game_mode = 1 AND ${a}.match_mode = 4`,
+    brawl: a => `${a}.game_mode = 4`
 };
 
-// Shared WHERE on start_time and the modes, for matches or the views that carry their columns
-export function matchFilter(args : { days? : number, mode? : string }, alias : string) {
+export const DEFAULT_MODE = "standard";
+
+// Shared WHERE on start_time, mode and map era, for matches or the views that carry their columns
+export function matchFilter(args : { days? : number, mode? : string, era? : Era }, alias : string) {
     const where : string[] = [];
     const params : number[] = [];
     if(args.days) {
         where.push(`${alias}.start_time >= ?`);
         params.push(Math.floor(Date.now() / 1000) - args.days * 86400);
     }
-    if(args.mode) {
-        const mode = MODES[args.mode];
-        if(!mode) throw new Error(`Mode is one of ${Object.keys(MODES).join(", ")}`);
-        where.push(`${alias}.game_mode = ? AND ${alias}.match_mode = ?`);
-        params.push(...mode);
+    if(args.era) {
+        where.push(`${alias}.start_time >= ? AND ${alias}.start_time < ?`);
+        params.push(args.era.from, args.era.to);
     }
+    const mode = MODES[args.mode ?? DEFAULT_MODE];
+    if(!mode) throw new Error(`Mode is one of ${Object.keys(MODES).join(", ")}`);
+    where.push(mode(alias));
     return { where, params };
 }

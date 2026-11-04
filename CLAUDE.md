@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 BotLocker is a Deno Discord bot. It watches linked players' Deadlock matches through a dedicated Steam account that talks to the Deadlock game coordinator (GC), then roasts losses and celebrates wins in one Discord channel. As a side job it fetches match salts and uploads them to deadlock-api. See `README.md` for what players see.
 
-`replays/` is a second, separate Deno app in the same compose project. It pulls match metadata for every salt the bot has and stores it for analysis (time dead, heatmaps). It has its own `deno.json`, Dockerfile and docs (`docs/replays.md`) and shares no code with the bot.
+`replays/` is a second, separate Deno app in the same compose project. It pulls match metadata for every salt the bot has and stores it for analysis (time dead, static and animated heatmaps). It has its own `deno.json`, Dockerfile and docs (`docs/replays.md`) and shares no code with the bot.
 
 ## Commands
 

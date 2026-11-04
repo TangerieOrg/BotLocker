@@ -4,7 +4,8 @@
         "start": "deno run -A src/main.ts",
         "check": "deno check src/main.ts src/cli/*.ts",
         "dead": "deno run -A src/cli/dead.ts",
-        "heatmap": "deno run -A src/cli/heatmap.ts"
+        "heatmap": "deno run -A src/cli/heatmap.ts",
+        "animate": "deno run -A src/cli/animate.ts"
     },
     "imports": {
         "@db/sqlite": "jsr:@db/sqlite@^0.13.0",
