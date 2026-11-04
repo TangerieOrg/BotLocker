@@ -102,6 +102,22 @@ await withDb(db => {
 
         CREATE INDEX IF NOT EXISTS deaths_match ON deaths (match_id, slot);
 
+        -- The metadata's running totals per player, souls by source. t is game seconds
+        CREATE TABLE IF NOT EXISTS stats (
+            match_id INTEGER NOT NULL,
+            slot INTEGER NOT NULL,
+            t INTEGER NOT NULL,
+            net_worth INTEGER NOT NULL,
+            souls_player INTEGER NOT NULL,
+            souls_lane INTEGER NOT NULL,
+            souls_neutral INTEGER NOT NULL,
+            souls_boss INTEGER NOT NULL,
+            souls_treasure INTEGER NOT NULL,
+            souls_denied INTEGER NOT NULL,
+            souls_death_loss INTEGER NOT NULL,
+            PRIMARY KEY (match_id, slot, t)
+        ) WITHOUT ROWID;
+
         -- One sample a second per player. health is a percentage and 0 while dead
         CREATE TABLE IF NOT EXISTS positions (
             match_id INTEGER NOT NULL,
@@ -136,4 +152,8 @@ await withDb(db => {
         JOIN matches m ON m.match_id = d.match_id
         LEFT JOIN players k ON k.match_id = d.match_id AND k.slot = d.killer_slot;
     `);
+
+    // Which INGEST_VERSION a match was stored at, older ones get re-ingested
+    using columns = db.prepare<{ name : string }>("SELECT name FROM pragma_table_info('ingest')");
+    if(!columns.all().some(x => x.name == "version")) db.exec("ALTER TABLE ingest ADD COLUMN version INTEGER NOT NULL DEFAULT 1");
 });

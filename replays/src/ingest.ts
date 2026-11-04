@@ -1,6 +1,6 @@
 import { SemaphoreQueue } from "@tangerie/utils/queue";
 import { INGEST_CONCURRENCY, POLL_INTERVAL_MS } from "./config.ts";
-import { countIngest, getDueIngest, type IngestRow, retryIngest, saveMeta, seedIngest } from "./db/ingest.ts";
+import { countIngest, getDueIngest, INGEST_VERSION, type IngestRow, requeueOutdated, retryIngest, saveMeta, seedIngest } from "./db/ingest.ts";
 import { now } from "./helpers/now.ts";
 import { logger } from "./helpers/log.ts";
 import { fetchMeta } from "./meta/fetch.ts";
@@ -42,6 +42,8 @@ async function ingest(row : IngestRow) {
 }
 
 export async function startIngest() {
+    const outdated = await requeueOutdated();
+    if(outdated > 0) log(`Re-ingesting ${outdated} matches stored before version ${INGEST_VERSION}`);
     log(`Pulling salts from the bot every ${POLL_INTERVAL_MS / 60000}m`, await countIngest());
     while(true) {
         if(Date.now() - lastSeed >= POLL_INTERVAL_MS) await seed();

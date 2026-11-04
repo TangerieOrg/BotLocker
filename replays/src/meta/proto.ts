@@ -9,8 +9,13 @@ message Death {
   optional uint32 game_time_s = 1; optional float time_to_kill_s = 2; optional uint32 killer_player_slot = 9;
   optional Position death_pos = 10; optional Position killer_pos = 11; optional uint32 death_duration_s = 12;
 }
+message Stats {
+  optional uint32 time_stamp_s = 1; optional uint32 net_worth = 2; optional uint32 gold_player = 3; optional uint32 gold_boss = 7;
+  optional uint32 gold_treasure = 9; optional uint32 gold_denied = 10; optional uint32 gold_death_loss = 11;
+  optional uint32 gold_lane_creep = 12; optional uint32 gold_neutral_creep = 13;
+}
 message Player {
-  optional uint32 account_id = 1; optional uint32 player_slot = 2; repeated Death death_details = 3; optional int32 team = 6;
+  optional uint32 account_id = 1; optional uint32 player_slot = 2; repeated Death death_details = 3; repeated Stats stats = 5; optional int32 team = 6;
   optional uint32 kills = 8; optional uint32 deaths = 9; optional uint32 assists = 10; optional uint32 net_worth = 11;
   optional uint32 hero_id = 12; optional uint32 level = 18;
 }
@@ -42,10 +47,24 @@ export type Death = {
     death_duration_s : number
 };
 
+// Running totals at a timestamp, snapshots come every 3-5 minutes plus one at the end
+export type Stats = {
+    time_stamp_s : number,
+    net_worth : number,
+    gold_player : number,
+    gold_boss : number,
+    gold_treasure : number,
+    gold_denied : number,
+    gold_death_loss : number,
+    gold_lane_creep : number,
+    gold_neutral_creep : number
+};
+
 export type Player = {
     account_id : number,
     player_slot : number,
     death_details : Death[],
+    stats : Stats[],
     team : number,
     kills : number,
     deaths : number,

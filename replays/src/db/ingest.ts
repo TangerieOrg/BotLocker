@@ -7,6 +7,9 @@ import { asDbFunction, transaction } from "./connection.ts";
 const int = (v : number) => Math.round(v) || 0;
 const pos = (p? : Position) => p ? [p.x || 0, p.y || 0, p.z || 0] : [null, null, null];
 
+// Bump when saveMeta stores something new, every match is then fetched again on the next start
+export const INGEST_VERSION = 2;
+
 export type IngestStatus = "pending" | "done" | "failed";
 
 export interface IngestRow extends SaltSource {
@@ -15,6 +18,7 @@ export interface IngestRow extends SaltSource {
     next_attempt_at: number;
     last_error: string | null;
     ingested_at: number | null;
+    version: number;
 }
 
 // Returns how many matches were new
@@ -43,6 +47,14 @@ export const retryIngest = asDbFunction((db, matchId : number, nextAt : number, 
     `, error, nextAt, maxAttempts, matchId);
 });
 
+// Returns how many done matches were queued again
+export const requeueOutdated = asDbFunction(db => {
+    using stmt = db.prepare(`--sql
+        UPDATE ingest SET status = 'pending', attempts = 0, next_attempt_at = 0 WHERE status = 'done' AND version < ?
+    `);
+    return stmt.run(INGEST_VERSION);
+});
+
 export const countIngest = asDbFunction(db => {
     using stmt = db.prepare<{ status : IngestStatus, n : number }>("SELECT status, COUNT(*) AS n FROM ingest GROUP BY status");
     return Object.fromEntries(stmt.all().map(x => [x.status, x.n])) as Partial<Record<IngestStatus, number>>;
@@ -50,7 +62,7 @@ export const countIngest = asDbFunction(db => {
 
 // Replaces whatever was stored for the match, so re-running one is safe
 export const saveMeta = asDbFunction((db, matchId : number, { version, info } : Meta) => transaction(db, () => {
-    for(const table of ["matches", "players", "deaths", "positions"]) db.exec(`DELETE FROM ${table} WHERE match_id = ?`, matchId);
+    for(const table of ["matches", "players", "deaths", "stats", "positions"]) db.exec(`DELETE FROM ${table} WHERE match_id = ?`, matchId);
 
     db.exec(`--sql
         INSERT INTO matches (match_id, start_time, duration_s, winning_team, game_mode, match_mode, meta_version) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -63,7 +75,15 @@ export const saveMeta = asDbFunction((db, matchId : number, { version, info } : 
         INSERT INTO deaths (match_id, slot, t, duration_s, time_to_kill_s, killer_slot, x, y, z, killer_x, killer_y, killer_z)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    using stat = db.prepare(`--sql
+        INSERT OR IGNORE INTO stats (match_id, slot, t, net_worth, souls_player, souls_lane, souls_neutral, souls_boss, souls_treasure, souls_denied, souls_death_loss)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
     for(const p of info.players) {
+        for(const x of p.stats) {
+            stat.run(matchId, p.player_slot, x.time_stamp_s, x.net_worth, x.gold_player, x.gold_lane_creep, x.gold_neutral_creep, x.gold_boss,
+                x.gold_treasure, x.gold_denied, x.gold_death_loss);
+        }
         player.run(matchId, p.player_slot, p.account_id, p.hero_id, p.team, p.kills, p.deaths, p.assists, p.net_worth, p.level);
         for(const d of p.death_details) {
             death.run(matchId, p.player_slot, d.game_time_s, d.death_duration_s, d.time_to_kill_s || 0, d.killer_player_slot,
@@ -89,6 +109,6 @@ export const saveMeta = asDbFunction((db, matchId : number, { version, info } : 
     }
 
     db.exec(`--sql
-        UPDATE ingest SET status = 'done', last_error = NULL, ingested_at = ? WHERE match_id = ?
-    `, now(), matchId);
+        UPDATE ingest SET status = 'done', last_error = NULL, ingested_at = ?, version = ? WHERE match_id = ?
+    `, now(), INGEST_VERSION, matchId);
 }));
