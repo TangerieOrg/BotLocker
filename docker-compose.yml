@@ -26,6 +26,31 @@ services:
       - "traefik.http.middlewares.stripprefix-botlocker-db.stripprefix.prefixes=/botlocker-db"
       - "traefik.http.services.botlocker-db.loadbalancer.server.port=8080"
 
+  # Pulls match metadata for every salt the bot has and serves the analysis database read-only, LAN only
+  replays:
+    build: ./replays
+    image: botlocker-replays:latest
+    pull_policy: never
+    restart: unless-stopped
+    depends_on:
+      - bot
+    environment:
+      - DATA_DIR=/data
+      - BOTLOCKER_DB_URL=ws://bot:8080
+    volumes:
+      - replays-data:/data
+    networks:
+      - default
+      - traefik-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-proxy"
+      - "traefik.http.routers.botlocker-replays.entrypoints=web"
+      - "traefik.http.routers.botlocker-replays.rule=Path(`/botlocker-replays`) || PathPrefix(`/botlocker-replays/`)"
+      - "traefik.http.routers.botlocker-replays.middlewares=lan-only@file,stripprefix-botlocker-replays"
+      - "traefik.http.middlewares.stripprefix-botlocker-replays.stripprefix.prefixes=/botlocker-replays"
+      - "traefik.http.services.botlocker-replays.loadbalancer.server.port=8080"
+
 networks:
   traefik-proxy:
     external: true
@@ -34,6 +59,7 @@ volumes:
   botlocker-data:
     external: true
     name: botlocker_botlocker-data
+  replays-data:
 
 secrets:
   BotLockerEnv:

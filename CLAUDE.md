@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 BotLocker is a Deno Discord bot. It watches linked players' Deadlock matches through a dedicated Steam account that talks to the Deadlock game coordinator (GC), then roasts losses and celebrates wins in one Discord channel. As a side job it fetches match salts and uploads them to deadlock-api. See `README.md` for what players see.
 
+`replays/` is a second, separate Deno app in the same compose project. It pulls match metadata for every salt the bot has and stores it for analysis (time dead, heatmaps). It has its own `deno.json`, Dockerfile and docs (`docs/replays.md`) and shares no code with the bot.
+
 ## Commands
 
 ```sh
@@ -13,7 +15,7 @@ deno task check   # type check
 deno lint
 ```
 
-- There are no tests. Before shipping, run `deno task check` and `deno lint`. Both should pass cleanly.
+- There are no tests. Before shipping, run `deno task check` and `deno lint`. Both should pass cleanly. If `replays/` changed, run `deno task check` in there too.
 - `deno task check` lists `src/discord/commands/*.ts` by name because commands are loaded with dynamic `import()` and wouldn't get checked otherwise. The `Dockerfile`'s `deno cache` line does the same thing. If you add another dynamically imported folder, add it to both.
 - Don't run `deno fmt`. The code uses its own style (`if(x)`, `name : Type`, 4-space indent) and `deno fmt` would rewrite every file.
 - Config comes from env vars, then `.env`, then `ENV_FILE` (the Docker secret in prod). See `src/env.ts`, `src/config.ts` and `.env.example`.
@@ -21,7 +23,7 @@ deno lint
 
 ## Deploy
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the image on the server and restarts the `botlocker` compose project. The live container is `botlocker-bot-1`; use `docker logs -f botlocker-bot-1` to watch it. SQLite and Steam data live in the external `botlocker_botlocker-data` volume. The bot also serves a read-only LAN-only SQLite endpoint; see "Reading the prod database" in `docs/data.md`.
+Pushing a `vX.Y.Z` tag runs `.github/workflows/main-bpd.yml`, which builds the images on the server and restarts the `botlocker` compose project. The live containers are `botlocker-bot-1` and `botlocker-replays-1`; use `docker logs -f botlocker-bot-1` to watch the bot. SQLite and Steam data live in the external `botlocker_botlocker-data` volume. The replays database lives in the compose-managed `botlocker_replays-data` volume. The bot also serves a read-only LAN-only SQLite endpoint; see "Reading the prod database" in `docs/data.md`.
 
 ## Architecture in brief
 
@@ -49,6 +51,7 @@ Read these before changing the matching area:
 - `docs/tracking.md` covers Steam accounts and login, presence → match finished → history checks, backfill, and announcements with party holding
 - `docs/salts.md` covers the salt pipeline, its status values and the GC and deadlock-api rate limits
 - `docs/discord.md` covers slash commands, line pools, the rotating status and @mentions
+- `docs/replays.md` covers the separate `replays/` app: metadata ingest, its schema and views, and the analysis CLIs
 - `docs/data.md` covers reading prod (use the `/anthropic-skills:remote-sqlite` skill on `ws://media/botlocker-db`), the SQLite schema, `kv` keys and how the database layer is written
 
 ## Conventions

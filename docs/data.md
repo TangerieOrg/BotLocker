@@ -6,6 +6,8 @@ Everything is in one SQLite file, `${DATA_DIR}/botlocker.sqlite3` (WAL). steam-u
 
 Don't `docker exec` into the bot to read prod. The bot itself serves the file read-only through `@tangerie/remote-sqlite` (`db/server.ts`, on `DB_PORT`, default 8080), routed by Traefik at `/botlocker-db` on the `web` entrypoint with the `lan-only@file` middleware, so no host port: `ws://media/botlocker-db`. Use the `/anthropic-skills:remote-sqlite` skill against that URL, for example `remote_sqlite.py ws://media/botlocker-db tables`. It can't write. For a write, like resetting a `kv` key, use the `docker exec` route in `botlocker-bot-1`.
 
+The `replays` service serves its analysis database the same way at `ws://media/botlocker-replays` (see `replays.md`).
+
 ## Schema (`db/connection.ts`)
 
 | Table | Key | Notes |
