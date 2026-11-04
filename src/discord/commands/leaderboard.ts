@@ -1,11 +1,14 @@
 import { type ChatInputCommandInteraction, InteractionContextType, SlashCommandBuilder } from "discord.js";
-import { getPeriodTotals, getStreak } from "../../db/mod.ts";
-import { PERIODS } from "../../helpers/stats.ts";
+import { getDeadTotals, getPeriodTotals, getStreak } from "../../db/mod.ts";
+import { logger } from "../../helpers/log.ts";
+import { formatPlayed, PERIODS } from "../../helpers/stats.ts";
 import { lossWindowStart } from "../../helpers/window.ts";
 import { getUser, LinkStore } from "../../links/LinkStore.ts";
 import { COLOURS, errorEmbed } from "../embeds.ts";
 import { interactive, periodRow, type View } from "../interactive.ts";
 import { displayNames } from "../names.ts";
+
+const { error } = logger("Leaderboard");
 
 // The default is the 2 week window used by announcements and status lines, the dropdown widens or narrows it
 const DEFAULT_PERIOD = "fortnight";
@@ -22,19 +25,37 @@ export const data = new SlashCommandBuilder()
     .setDescription("Get the (loser) board")
     .setContexts(InteractionContextType.Guild);
 
-async function board(since : number, streetBrawl : boolean, names : Map<string, string>) {
-    const rows = await Promise.all((await getPeriodTotals(since, streetBrawl))
-        .map(x => ({ ...x, name: names.get(getUser(x.account_id) ?? "") }))
-        .filter(x => x.name)
+// Standard matches only
+async function losers(since : number, names : Map<string, string>) {
+    const rows = await Promise.all((await getPeriodTotals(since))
+        .flatMap(x => {
+            const name = names.get(getUser(x.account_id) ?? "");
+            return name ? [{ ...x, name }] : [];
+        })
         .map(async x => ({
             ...x,
             score: x.losses / x.matches,
             streak: await getStreak(x.account_id)
         })));
 
-    return rows
-        .sort((a, b) => b.score - a.score || b.losses - a.losses)
-        .map((x, i) => `**${i + 1}**. ${x.name} - ${Math.round(x.score * 100)}% Lost [${x.losses}/${x.matches}]${x.streak <= -3 ? " 🔥 tilted" : ""}`);
+    return rows.sort((a, b) => b.score - a.score || b.losses - a.losses);
+}
+
+// Replays lags behind and is optional, so it only covers ingested matches and anything that goes wrong just drops the section
+async function timeDead(players : { account_id : number, name : string, matches : number }[], since : number) {
+    const totals = await getDeadTotals(players.map(x => x.account_id), since).catch(err => {
+        error("Couldn't read time dead from replays", err);
+        return [];
+    });
+    const byAccount = new Map(totals.map(x => [x.account_id, x]));
+
+    return players
+        .flatMap(x => {
+            const dead = byAccount.get(x.account_id);
+            return dead ? [{ ...x, dead, missing: Math.max(x.matches - dead.matches, 0) }] : [];
+        })
+        .sort((a, b) => b.dead.avg_pct - a.dead.avg_pct)
+        .map((x, i) => `**${i + 1}**. ${x.name} - ${x.dead.avg_pct.toFixed(1)}% Dead [${formatPlayed(x.dead.dead_s)}]${x.missing > 0 ? ` (${x.missing} missing)` : ""}`);
 }
 
 export async function execute(interaction : ChatInputCommandInteraction) {
@@ -45,17 +66,16 @@ export async function execute(interaction : ChatInputCommandInteraction) {
         const since = period.since();
         const names = await displayNames(interaction.guild!, [...LinkStore.get().links.keys()]);
 
-        const standard = await board(since, false, names);
-        const streetBrawl = await board(since, true, names);
+        const players = await losers(since, names);
         const components = [periodRow(BOARD_PERIODS, key)];
 
-        if(standard.length == 0 && streetBrawl.length == 0) {
+        if(players.length == 0) {
             return { embeds: [errorEmbed("No Games Recorded", `Nobody has played in the period: ${period.label.toLowerCase()}`)], components };
         }
 
-        const lines : string[] = [];
-        if(standard.length > 0) lines.push("**Standard**", ...standard);
-        if(streetBrawl.length > 0) lines.push(lines.length > 0 ? "\n**Street Brawl**" : "**Street Brawl**", ...streetBrawl);
+        const lines = players.map((x, i) => `**${i + 1}**. ${x.name} - ${Math.round(x.score * 100)}% Lost [${x.losses}/${x.matches}]${x.streak <= -3 ? " 🔥 tilted" : ""}`);
+        const dead = await timeDead(players, since);
+        if(dead.length > 0) lines.push("\n**Time Dead**", ...dead);
 
         return {
             embeds: [{

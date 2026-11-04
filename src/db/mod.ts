@@ -4,3 +4,4 @@ export * from "./matches.ts";
 export * from "./kv.ts";
 export * from "./salts.ts";
 export * from "./names.ts";
+export * from "./replays.ts";

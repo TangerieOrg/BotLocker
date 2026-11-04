@@ -21,6 +21,8 @@ export const SEND_DISCORD_MESSAGE = getBool("SEND_DISCORD_MESSAGE") ?? true;
 export const DATA_DIR = Deno.env.get("DATA_DIR") ?? "./data";
 // Read-only remote-sqlite endpoint for the database, 0 turns it off
 export const DB_PORT = getNumber("DB_PORT") ?? 8080;
+// The replays app's analysis database, read for time spent dead. Empty turns it off
+export const REPLAYS_DB_URL = Deno.env.get("REPLAYS_DB_URL") ?? "ws://replays:8080";
 
 // First account is the main bot (friends, presence, history), the rest only fetch match salts and only log in to do it.
 // A trailing |lazy marks a personal account that also waits until its owner is off Steam

@@ -28,6 +28,7 @@ bot match_salts (ws://bot:8080) ──▶ ingest table ──▶ http://replay{c
 - **`meta/proto.ts`:** an inline subset of `citadel_gcmessages_common.proto` (SteamDatabase/Protobufs), the same approach as `src/steam/gc.ts`. Add fields there when a new analysis needs them.
 - **Re-ingesting:** to store something new for old matches, bump `INGEST_VERSION` in `db/ingest.ts`. On start, every `done` match stored at an older version goes back to `pending`, and `saveMeta` replaces its rows. A full re-ingest takes the server about 10 minutes.
 - **`db/server.ts`:** serves `replays.sqlite3` read-only on `DB_PORT`. Traefik routes it at `/botlocker-replays` with `lan-only@file`, so it's `ws://media/botlocker-replays`.
+- **Read by the bot:** the bot's `/leaderboard` queries `time_dead` over `ws://replays:8080` (`REPLAYS_DB_URL`, see `discord.md`), so renaming or reshaping that view's columns breaks it.
 
 The ~5.3k match backfill takes minutes to an hour depending on Valve's latency. It comes to roughly 650 KB per match in SQLite, almost all of it `positions`.
 

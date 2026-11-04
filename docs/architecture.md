@@ -32,7 +32,7 @@ A missing `DISCORD_TOKEN`, `CHANNEL_ID` or `STEAM_USERS`, or a bad channel, call
 | `announce/` | `effects.ts` (posting unannounced matches, holding for party mates) and `embed.ts` (building the embed) |
 | `salts/` | `effects.ts`, the whole salt pipeline |
 | `deadlock/` | deadlock-api HTTP: `assets.ts` (hero and rank names and icons, read from SQLite and topped up from the API daily), `history.ts` (archived history for backfill), `salts.ts` (stored salts read, upload) |
-| `db/` | SQLite access, re-exported from `db/mod.ts`. `server.ts` is the read-only remote-sqlite endpoint |
+| `db/` | SQLite access, re-exported from `db/mod.ts`. `server.ts` is the read-only remote-sqlite endpoint. `replays.ts` reads time dead from the replays app's database over remote-sqlite |
 | `discord/` | Client, command loader, `commands/*.ts`, the presence rotation, mentions, guard DMs, embed helpers, `isOwner`, `names.ts` (stored display names) and `nameSync.ts` |
 | `lines/` | All the roast and praise text pools, plus the logic for picking and filling them |
 | `links/` | `LinkStore` |

@@ -63,14 +63,15 @@ export const markAnnounced = asDbFunction((db, accountId : number, matchId : num
     db.exec("UPDATE matches SET announced_at = ? WHERE account_id = ? AND match_id = ?", now(), accountId, matchId);
 });
 
-export const getPeriodTotals = asDbFunction((db, since : number, streetBrawl : boolean) => {
+// Standard matches only, the loserboard leaves Street Brawl out
+export const getPeriodTotals = asDbFunction((db, since : number) => {
     using stmt = db.prepare<Totals>(`--sql
         SELECT account_id, COUNT(*) AS matches, SUM(won) AS wins, COUNT(*) - SUM(won) AS losses
         FROM matches
-        WHERE start_time >= ? AND (game_mode = 4) = ?
+        WHERE start_time >= ? AND game_mode != 4
         GROUP BY account_id
     `);
-    return stmt.all(since, Number(streetBrawl));
+    return stmt.all(since);
 });
 
 // Every lost game since the given time, Street Brawl included since it's still time spent losing
