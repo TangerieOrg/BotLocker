@@ -102,7 +102,8 @@ function createAccount(creds : { username : string, password : string, lazy? : b
         setLoginState({ state: "loggedOn" });
         // Staying offline keeps friends from seeing an on-demand login
         if(onDemand) setKv(selfKey, String(client.steamID!.accountid)).catch(err => error(`Couldn't save account id for ${tag}`, err));
-        else client.setPersona(SteamUser.EPersonaState.Online);
+        // Invisible still gets friend presence pushed to it, it just doesn't show the bot as online to friends
+        else client.setPersona(SteamUser.EPersonaState.Invisible);
     });
 
     // Only asked for on a password login from somewhere new, the saved token skips it after that
