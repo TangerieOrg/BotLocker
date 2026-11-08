@@ -5,6 +5,8 @@ export interface Check {
     at: number;
     // Set when following up a game they just finished, retried until the match shows up
     attempt?: number;
+    // Queued because someone else finished a match, they may have been in it with presence hidden
+    fallback?: boolean;
 }
 
 interface TrackerState {
@@ -18,7 +20,7 @@ export const TrackerStore = createStore({
     state: { checks: new Map(), recorded: 0 } as TrackerState,
     actions: {
         // Doesn't replace a check that's already waiting
-        queue: (s, id : number, at : number) => { if(!s.checks.has(id)) s.checks.set(id, { at }) },
+        queue: (s, id : number, at : number, fallback? : boolean) => { if(!s.checks.has(id)) s.checks.set(id, { at, fallback }) },
         followUp: (s, id : number, attempt : number, at : number) => { s.checks.set(id, { at, attempt }) },
         finish: (s, id : number) => { s.checks.delete(id) },
         recorded: (s) => { s.recorded++ }

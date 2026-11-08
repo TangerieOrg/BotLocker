@@ -26,13 +26,15 @@ const heldSince = new Map<number, number>();
 let holdTimer : ReturnType<typeof setTimeout> | undefined;
 
 // Linked party mates of this match's players who don't have it stored yet and are still in a round or waiting on a
-// history check. One player's history can show the match before Steam says the others have left it
+// history check. One player's history can show the match before Steam says the others have left it.
+// A fallback check counts whatever the party, since a mate with hidden presence has no party to match on
 async function waitingOn(matchId : number, rows : Match[]) {
     const have = new Set(await getMatchPlayers(matchId));
     const parties = new Set(rows.map(x => partyOf(x.account_id)).filter(x => x));
     const { checks } = TrackerStore.get();
     const { inMatch } = SteamStore.get();
-    return [...linkedAccounts()].filter(id => !have.has(id) && (checks.has(id) || inMatch.has(id)) && parties.has(partyOf(id)));
+    return [...linkedAccounts()].filter(id => !have.has(id)
+        && ((checks.has(id) || inMatch.has(id)) && parties.has(partyOf(id)) || checks.get(id)?.fallback));
 }
 
 // Who can actually be announced, the rest are just skipped (and still marked)
@@ -98,4 +100,6 @@ async function announcePending() {
 export function startAnnouncer() {
     watch(DiscordStore, s => s.channel, flush);
     TrackerStore.subscribe(s => s.recorded, flush);
+    // A held match is released as soon as the fallback checks it waited on come back empty
+    TrackerStore.subscribe(s => s.checks, () => { if(heldSince.size > 0) flush() });
 }

@@ -26,8 +26,10 @@ The tracker queues a check in three cases:
 | Trigger | Check |
 |---|---|
 | Account becomes tracked (bot start, new link, new friend) | `followUp(id, 0, now)` |
-| `finished[id]` bumped | `followUp(id, 0, now + 30s)` |
+| `finished[id]` bumped | `followUp(id, 0, now + 30s)`, plus a single fallback `queue` for every other tracked player who isn't visibly in a round |
 | Every `GC_POLL_INTERVAL_MS` (1h) | `queue(id, now)` backstop |
+
+The fallback covers party mates whose game status is hidden on Steam: they never show as in Deadlock, so nothing else would check them until the hourly backstop. It is one check with no retries, flagged `fallback`, and it never replaces a check that is already waiting.
 
 A follow-up that finds nothing is retried at 30s, 2m, 5m and 10m (`CHECK_DELAYS_MS`) because the match can take a while to appear in history. The runner keeps one timer per check and re-arms whenever `checks` or `gcReady` changes. GC history requests are serialized with a 2s gap, and the GC pauses for 1h if it rate limits.
 
@@ -39,7 +41,7 @@ A follow-up that finds nothing is retried at 30s, 2m, 5m and 10m (`CHECK_DELAYS_
 ## Announcing (`announce/`)
 
 - The announcer runs a single-flight pass (`SemaphoreQueue(1)`) when `DiscordStore.channel` is set and whenever `TrackerStore.recorded` bumps. Each pass reads every `announced_at IS NULL` row, grouped by match.
-- **Party hold**: if a linked player who was in the same Steam party doesn't have the match stored yet and still has a pending check or is still in a round (`inMatch`), the match waits up to 3 minutes so party mates can go in one message. The in-round part matters because one player's GC history can show the match before Steam presence says the rest have left it.
+- **Party hold**: if a linked player who was in the same Steam party doesn't have the match stored yet and still has a pending check or is still in a round (`inMatch`), the match waits up to 3 minutes so party mates can go in one message. A pending `fallback` check holds the match whatever the party, since a player with hidden presence has no party id to match on. The hold is released as soon as `TrackerStore.checks` changes and nothing is waiting. The in-round part matters because one player's GC history can show the match before Steam presence says the rest have left it.
 - The bot posts one embed per team per match: a solo embed or a party embed. Players on both teams get separate messages. A player is skipped if they are unlinked, not in the guild, or the match ended more than `MAX_NOTIFY_AGE_H` ago.
 - Rows are marked announced even if sending fails, so one bad match can't loop forever. With `SEND_DISCORD_MESSAGE=0` (as in `deno task dev`) the bot logs the messages instead of posting them.
 - The embed text comes from `lines/`: an insult or compliment, plus a tilt line, a win-streak line or a streak-broken line based on `getStreak`.

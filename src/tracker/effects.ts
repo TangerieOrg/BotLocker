@@ -83,6 +83,13 @@ export function startTracker() {
         for(const [id] of diffMap(cur, prev).changed.filter(([x]) => tracked.has(x))) {
             log(`${id} finished a match, checking for it`);
             followUp(id, 0, Date.now() + CHECK_DELAYS_MS[0]);
+
+            // Party mates with their game status hidden never show up as in a round, so look at everyone else once too.
+            // Anyone visibly in a round gets their own check when it ends
+            const { inMatch } = SteamStore.get();
+            for(const other of tracked) {
+                if(other != id && !inMatch.has(other)) queue(other, Date.now() + CHECK_DELAYS_MS[0], true);
+            }
         }
     });
 
