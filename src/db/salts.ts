@@ -54,6 +54,13 @@ export const getMissingSalts = asDbFunction((db, afterMatchId : number, limit : 
     return stmt.all(afterMatchId, limit);
 });
 
+// Which of these matches already have a row, those are ours and go through our own queue
+export const getKnownSalts = asDbFunction((db, matchIds : number[]) => {
+    if(matchIds.length == 0) return new Set<number>();
+    using stmt = db.prepare<{ match_id: number }>(`SELECT match_id FROM match_salts WHERE match_id IN (${matchIds.map(() => "?").join(", ")})`);
+    return new Set(stmt.all(...matchIds).map(x => x.match_id));
+});
+
 export const setSaltStatus = asDbFunction((db, matchId : number, status : SaltStatus, salts? : Salts, source? : string, error? : string) => {
     const at = Math.floor(Date.now() / 1000);
     db.exec(`--sql
@@ -145,4 +152,19 @@ const limitKey = (username? : string) => `salt_rate_limit${username ? `:${userna
 export async function getRateLimit(username? : string) {
     const raw = await getKv(limitKey(username));
     return raw ? JSON.parse(raw) as RateLimitRecord : undefined;
+}
+
+// Running totals for strangers' matches taken from deadlock-api's to-fetch list, which aren't stored anywhere else
+type ToFetchStats = { fetched : number, uploaded : number };
+const TO_FETCH_KEY = "salt_to_fetch";
+
+export async function getToFetchStats() : Promise<ToFetchStats> {
+    const raw = await getKv(TO_FETCH_KEY);
+    return raw ? JSON.parse(raw) as ToFetchStats : { fetched: 0, uploaded: 0 };
+}
+
+export async function recordToFetch(kind : keyof ToFetchStats) {
+    const stats = await getToFetchStats();
+    stats[kind]++;
+    await setKv(TO_FETCH_KEY, JSON.stringify(stats));
 }

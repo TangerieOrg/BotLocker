@@ -39,6 +39,7 @@ Reads use SQLite, and the outside world only tops it up:
 | `backfilled:<account_id>` | The `BACKFILL_VERSION` this account was last backfilled at |
 | `salt_fetch_log`, `salt_fetch_log:<username>` | JSON array of GC salt request times (unix s) in the last 24h, for main and the extra accounts |
 | `salt_rate_limit`, `salt_rate_limit:<username>` | `{at, fetched, streak}`: when Steam last rate limited the account, how many salts it had fetched in the 24h before, and how many limits in a row with no fetch between (sets a bot's pause), shown by `/status` |
+| `salt_to_fetch` | `{fetched, uploaded}`: running totals of strangers' matches taken from deadlock-api's to-fetch list, shown by `/status` |
 
 ## Writing DB code
 

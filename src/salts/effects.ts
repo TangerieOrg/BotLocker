@@ -3,8 +3,11 @@ import {
     SALT_RATE_LIMIT_PAUSE_S, SALT_TARGET_USERS, SALT_UPLOAD
 } from "../config.ts";
 import { getMatchPlayers } from "../db/matches.ts";
-import { exhaustFetchLog, getDueSalts, getFetchLog, getMissingSalts, hasSalt, recordFetch, recordRateLimit, retrySalt, type SaltRow, type Salts, seedSalts, setSaltStatus } from "../db/salts.ts";
-import { ApiError, getStoredSaltsFor, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
+import {
+    exhaustFetchLog, getDueSalts, getFetchLog, getKnownSalts, getMissingSalts, hasSalt, recordFetch, recordRateLimit, recordToFetch, retrySalt, type SaltRow,
+    type Salts, seedSalts, setSaltStatus
+} from "../db/salts.ts";
+import { ApiError, getStoredSaltsFor, getToFetch, releaseToFetch, SALT_READ_CONCURRENCY, uploadSalts } from "../deadlock/salts.ts";
 import { now } from "../helpers/now.ts";
 import { logger } from "../helpers/log.ts";
 import { EXTRA_LOGIN_GAP_MS, getAccounts, type SteamAccount } from "../steam/client.ts";
@@ -178,7 +181,8 @@ async function fetchNext(account : SteamAccount) {
     if(fetches.length > 0 && now() - Math.max(...fetches) < gapFor(account) / 1000) return false;
 
     const row = await pickMissing();
-    if(!row) return false;
+    // Nothing of ours left, so the slot goes to a match from deadlock-api's to-fetch list instead
+    if(!row) return await fetchStranger(account);
 
     try {
         // On-demand accounts only log in now, after deadlock-api has confirmed there's something to fetch
@@ -187,6 +191,14 @@ async function fetchNext(account : SteamAccount) {
         inFlight.delete(row.match_id);
     }
     return true;
+}
+
+// Like deadlock-api-ingest: the account sits out the whole pause, its next request is the probe
+async function rateLimited(account : SteamAccount, tag : string) {
+    const streak = await recordRateLimit(now(), logUser(account));
+    const pause = pauseFor(account, streak);
+    await exhaustFetchLog(now(), fetchCapFor(account), pause, logUser(account));
+    error(`GC rate limited salt fetching on ${tag} (${streak} in a row), nothing more from it for ${pause / 3600}h`);
 }
 
 async function fetchOne(account : SteamAccount, row : SaltRow) {
@@ -214,14 +226,9 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
                 await setSaltStatus(row.match_id, "failed", undefined, undefined, "GC returned no salts");
             }
             break;
-        // Like deadlock-api-ingest: the account sits out the whole pause, its next request is the probe
-        case GcResult.RateLimited: {
-            const streak = await recordRateLimit(now(), logUser(account));
-            const pause = pauseFor(account, streak);
-            await exhaustFetchLog(now(), fetchCapFor(account), pause, logUser(account));
-            error(`GC rate limited salt fetching on ${tag} (${streak} in a row), nothing more from it for ${pause / 3600}h`);
+        case GcResult.RateLimited:
+            await rateLimited(account, tag);
             break;
-        }
         case GcResult.InvalidMatch:
         case GcResult.InvalidPermission:
             await setSaltStatus(row.match_id, "failed", undefined, undefined, `GC result ${res.result}`);
@@ -229,6 +236,77 @@ async function fetchOne(account : SteamAccount, row : SaltRow) {
         default:
             await retrySalt(row.match_id, backoff(row), `GC result ${res.result}`, MAX_ATTEMPTS);
     }
+}
+
+// The newest match on the to-fetch list that isn't ours or being fetched, claimed in inFlight. The list stays
+// hidden from other workers until the caller releases the claim
+async function pickStranger() : Promise<{ matchId : number, claim? : string } | undefined> {
+    if(now() < saltState.apiPausedUntil) return;
+    let list;
+    try {
+        list = await getToFetch();
+    } catch(err) {
+        apiFailed(err);
+        return;
+    }
+
+    const known = await getKnownSalts(list.ids);
+    const matchId = list.ids.filter(x => !known.has(x) && !inFlight.has(x)).sort((a, b) => b - a)[0];
+    if(matchId === undefined) {
+        if(list.claim) await release(list.claim);
+        return;
+    }
+    inFlight.add(matchId);
+    return { matchId, claim: list.claim };
+}
+
+// Best effort, the claim expires on its own
+const release = (claim : string) => releaseToFetch(claim).catch(err => error("Couldn't release the to-fetch claim", err));
+
+// A stranger's match isn't stored, so its salts are uploaded straight away and dropped if that fails. Whether a request went out
+async function fetchStranger(account : SteamAccount) {
+    const pick = await pickStranger();
+    if(!pick) return false;
+
+    const { matchId, claim } = pick;
+    const tag = `${account.username}, from to-fetch`;
+    let res;
+    try {
+        res = await account.session(async () => {
+            try {
+                return await getGcMatchSalts(account, matchId);
+            } catch(err) {
+                // Not connected means it never left, anything else may have counted against us
+                if(!message(err).startsWith("Not connected")) await recordFetch(now(), logUser(account));
+                error(`Salt fetch for ${matchId} failed (${tag})`, err);
+            }
+        });
+    } finally {
+        inFlight.delete(matchId);
+        if(claim) await release(claim);
+    }
+    if(!res) return true;
+    await recordFetch(now(), logUser(account));
+
+    if(res.result == GcResult.RateLimited) {
+        await rateLimited(account, tag);
+        return true;
+    }
+    if(res.result != GcResult.Success || !hasSalt(res)) {
+        log(`No salts for ${matchId} (${tag}), GC result ${res.result}`);
+        return true;
+    }
+
+    await recordToFetch("fetched");
+    try {
+        await uploadSalts([{ match_id: matchId, ...res }], `botlocker:${account.selfId() ?? "unknown"}`);
+        await recordToFetch("uploaded");
+        log(`Got and uploaded salts for ${matchId} (${tag})`);
+    } catch(err) {
+        if(err instanceof ApiError && err.status == 400) error(`deadlock-api rejected the salts for ${matchId} (${tag})`);
+        else apiFailed(err);
+    }
+    return true;
 }
 
 async function uploadOne(row : SaltRow, username : string) {

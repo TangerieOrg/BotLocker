@@ -61,3 +61,33 @@ export async function uploadSalts(entries : SaltUpload[], username : string) {
     });
     await res.body?.cancel();
 }
+
+const CLAIM_COOKIE = "to_fetch_claim";
+
+export interface ToFetch {
+    ids: number[];
+    // Hides the list from other workers until it's released or expires
+    claim? : string;
+}
+
+// deadlock-api's list of matches nobody has salts for yet, undocumented, used the same way as deadlock-api-ingest
+export async function getToFetch() : Promise<ToFetch> {
+    const res = await request("to-fetch", `${API_URL}/to-fetch`);
+    if(res.status == 404) {
+        await res.body?.cancel();
+        return { ids: [] };
+    }
+    // An empty value is them clearing it
+    const claim = res.headers.getSetCookie().map(x => x.split(";")[0])
+        .find(x => x.startsWith(`${CLAIM_COOKIE}=`))?.slice(CLAIM_COOKIE.length + 1) || undefined;
+    return { ids: await res.json() as number[], claim };
+}
+
+// Hands the rest of the list back to other workers, otherwise they wait for the claim to expire
+export async function releaseToFetch(claim : string) {
+    const res = await request("to-fetch release", `${API_URL}/to-fetch/release`, {
+        method: "POST",
+        headers: { cookie: `${CLAIM_COOKIE}=${claim}` }
+    });
+    await res.body?.cancel();
+}

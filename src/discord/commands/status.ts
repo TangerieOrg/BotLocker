@@ -1,6 +1,6 @@
 import { type ChatInputCommandInteraction, InteractionContextType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
 import { SALT_UPLOAD } from "../../config.ts";
-import { getFetchLog, getRateLimit, getSaltSummary, type SaltStatus } from "../../db/salts.ts";
+import { getFetchLog, getRateLimit, getSaltSummary, getToFetchStats, type SaltStatus } from "../../db/salts.ts";
 import { now } from "../../helpers/now.ts";
 import { fetchCapFor, gapFor, saltState } from "../../salts/effects.ts";
 import { getAccounts } from "../../steam/client.ts";
@@ -32,10 +32,11 @@ export async function execute(interaction : ChatInputCommandInteraction) {
 
     const at = now();
     const accounts = getAccounts();
-    const [summary, logs, limits] = await Promise.all([
+    const [summary, logs, limits, toFetch] = await Promise.all([
         getSaltSummary(at),
         Promise.all(accounts.map(x => getFetchLog(at, x.main ? undefined : x.username))),
-        Promise.all(accounts.map(x => getRateLimit(x.main ? undefined : x.username)))
+        Promise.all(accounts.map(x => getRateLimit(x.main ? undefined : x.username))),
+        getToFetchStats()
     ]);
 
     const total = Object.values(summary.counts).reduce((a, b) => a + b, 0);
@@ -78,6 +79,7 @@ export async function execute(interaction : ChatInputCommandInteraction) {
             fields: [
                 { name: "Queue", value: queue.join(", ") },
                 { name: "GC budget", value: budget.join("\n") },
+                { name: "deadlock-api to-fetch", value: `Other players' matches, when ours are done: ${toFetch.fetched} fetched, ${toFetch.uploaded} uploaded` },
                 {
                     name: "Services",
                     value: [
