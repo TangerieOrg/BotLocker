@@ -13,7 +13,7 @@
 
 ## Presence → "finished a match"
 
-- Steam pushes persona updates. Rich presence for Deadlock players is also polled every 30s because Steam doesn't reliably push it. Both paths go through `updateStatus` → `setOnline`. In an 11-13 test the poll came back empty even for a friend whose rich presence was being pushed, so in practice the pushes do the work.
+- Steam pushes persona updates, which go through `updateStatus` → `setOnline`. An update that only touches the persona has no rich presence, so the last pushed rich presence is kept while they're still in Deadlock. Rich presence used to be polled every 30s as well, but `requestRichPresence` came back empty in an 11-13 test even for a friend whose rich presence was being pushed, so it was removed.
 - Main stays `Online`. From 11-08 to 11-13 it logged in `Invisible`. Friends' game changes then only arrived for a while after each login, so most matches were only found by the hourly backstop, 30-60m late.
 - `setOnline` in `SteamStore` decides whether someone is in a match from `steam_display` (an `#steam_citadel_ingame...` prefix). It tracks `inMatch` (id → minutes in), and it bumps `finished[id]` when a round ends. A round counts as ended when they leave it, close the game, or the minutes go backwards (straight into a new match).
 - `parties` remembers each player's last `steam_player_group`, even after they go offline, so the announcer can group party mates.

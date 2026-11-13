@@ -27,7 +27,7 @@ A missing `DISCORD_TOKEN`, `CHANNEL_ID` or `STEAM_USERS`, or a bad channel, call
 
 | Folder | What's there |
 |---|---|
-| `steam/` | `client.ts`: steam-user accounts, login and Steam Guard, the GC hello loop, `gcJob`, presence and rich presence polling, `addFriend`/`fetchPersona`. `gc.ts`: the protobuf GC requests (match history, salts) and their rate limiting. `friends.ts`: the auto-friend effect. `names.ts`: saves linked accounts' persona names. `activity.ts`: turns presence into an `Activity` tier (match > queue > deadlock > game > online) |
+| `steam/` | `client.ts`: steam-user accounts, login and Steam Guard, the GC hello loop, `gcJob`, friend presence, `addFriend`/`fetchPersona`. `gc.ts`: the protobuf GC requests (match history, salts) and their rate limiting. `friends.ts`: the auto-friend effect. `names.ts`: saves linked accounts' persona names. `activity.ts`: turns presence into an `Activity` tier (match > queue > deadlock > game > online) |
 | `tracker/` | `TrackerStore`, `effects.ts` (when to check whose history), `history.ts` (`syncHistory` and backfill) |
 | `announce/` | `effects.ts` (posting unannounced matches, holding for party mates) and `embed.ts` (building the embed) |
 | `salts/` | `effects.ts`, the whole salt pipeline |

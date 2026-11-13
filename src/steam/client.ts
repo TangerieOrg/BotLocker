@@ -23,7 +23,6 @@ const RELOGIN_MS = 5 * 60 * 1000;
 // Steam stops showing main as in Deadlock after a long session, a fresh login brings it back
 const MAIN_REFRESH_MS = 6 * 60 * 60 * 1000;
 const MAIN_REFRESH_GAP_MS = 5000;
-const RICH_PRESENCE_POLL_MS = 30 * 1000;
 // Spread the extra accounts out so Steam doesn't throttle a burst of logins
 export const EXTRA_LOGIN_GAP_MS = 5000;
 // An on-demand session gives up if the game coordinator hasn't answered by then
@@ -359,7 +358,7 @@ function registerMainHandlers(client : SteamUser) {
         const appId = field("game_played_app_id") || (gameId < 2 ** 32 ? gameId : 0);
         const online = state != null && state != 0;
 
-        // Pushed rich presence is often empty even mid-game, so that keeps whatever the poll last saw
+        // Updates that only touch the persona come with no rich presence, so that keeps whatever was last pushed
         const last = SteamStore.get().online.get(id);
         const pushed = update.rich_presence?.length ? Object.fromEntries(update.rich_presence.map(x => [x.key, String(x.value)])) : undefined;
         const rich = appId != DEADLOCK_APP_ID ? undefined : pushed ?? (last?.appId == DEADLOCK_APP_ID ? last.rich : undefined);
@@ -371,7 +370,6 @@ function registerMainHandlers(client : SteamUser) {
     });
 
     watchGames(client);
-    setInterval(() => pollRichPresence(client).catch(err => error("Couldn't get rich presence", err)), RICH_PRESENCE_POLL_MS);
 }
 
 const gameLabel = (status? : OnlineStatus) => !status ? undefined : status.appId == DEADLOCK_APP_ID ? "Deadlock" : gameName(status);
@@ -432,26 +430,6 @@ function updateStatus(id : number, status? : OnlineStatus) {
     const finished = after.finished.get(id) != before.finished.get(id);
     if(finished) log(`${id} finished a match`);
     if(after.inMatch.has(id) && (finished || !before.inMatch.has(id))) log(`${id} started a match`);
-}
-
-// Steam doesn't reliably push friends' rich presence, so ask for it while they're in Deadlock
-async function pollRichPresence(client : SteamUser) {
-    const { login, online } = SteamStore.get();
-    const ids = [...online].filter(([, x]) => x.appId == DEADLOCK_APP_ID).map(([id]) => id);
-    if(login.state != "loggedOn" || ids.length == 0) return;
-
-    const res = await client.requestRichPresence(DEADLOCK_APP_ID, ids.map(toSteam64), "english");
-    for(const id of ids) {
-        // Could have closed the game while this was in flight
-        const status = SteamStore.get().online.get(id);
-        if(status?.appId != DEADLOCK_APP_ID) continue;
-        // Nothing back for them isn't the same as no rich presence, keep what's known rather than flip them out of a match
-        const polled = res.users[toSteam64(id)]?.richPresence as unknown as Record<string, unknown> | undefined;
-        if(!polled?.steam_display) continue;
-
-        const rich = Object.fromEntries(Object.entries(polled).map(([k, v]) => [k, String(v)]));
-        updateStatus(id, { ...status, display: rich.steam_display, rich });
-    }
 }
 
 export const gcJob = (type : number, payload : Uint8Array) => accounts[0].gcJob(type, payload);
